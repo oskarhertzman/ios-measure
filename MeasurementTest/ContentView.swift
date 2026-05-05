@@ -6,8 +6,14 @@
 //
 
 import SwiftUI
+import RealityKit
 
 struct ContentView: View {
+	init() {
+		// Register the billboard logic before the ARView is created
+		BillboardComponent.registerComponent()
+	}
+	
     var body: some View {
         MeasurementExperienceView()
     }

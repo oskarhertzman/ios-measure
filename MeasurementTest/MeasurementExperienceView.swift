@@ -515,6 +515,7 @@ struct ARMeasurementView: UIViewRepresentable {
 			}
 			
 			syncSceneContent()
+			updateBillboards()
 		}
 		
 		private struct RaycastHit {
@@ -587,44 +588,32 @@ struct ARMeasurementView: UIViewRepresentable {
 			updateLine(in: arView)
 		}
 		
-			private func updatePointAnchor(_ anchor: inout AnchorEntity?, point: SIMD3<Float>?, color: UIColor, in arView: ARView) {
-				guard let point else {
-					if let anchor {
-						arView.scene.removeAnchor(anchor)
-				}
-					anchor = nil
-					return
-				}
-				
-				let anchorEntity = anchor ?? AnchorEntity(world: .zero)
-				if anchorEntity.children.isEmpty {
-					let ring = ModelEntity(
-						mesh: .generateSphere(radius: 0.008),
-						materials: [SimpleMaterial(color: .white.withAlphaComponent(0.95), roughness: 0.05, isMetallic: false)]
-					)
-					let core = ModelEntity(
-						mesh: .generateSphere(radius: 0.005),
-						materials: [Self.pointMaterial(color: color)]
-					)
-					anchorEntity.addChild(ring)
-					anchorEntity.addChild(core)
-				}
-				
-				let core = anchorEntity.children.compactMap { $0 as? ModelEntity }.last
-				core?.model?.materials = [Self.pointMaterial(color: color)]
-				anchorEntity.position = point
-				
-				if anchor == nil {
-					arView.scene.addAnchor(anchorEntity)
-					anchor = anchorEntity
+		private func updatePointAnchor(_ anchor: inout AnchorEntity?, point: SIMD3<Float>?, color: UIColor, in arView: ARView) {
+			guard let point else {
+				if let anchor { arView.scene.removeAnchor(anchor) }
+				anchor = nil
+				return
+			}
+			
+			let anchorEntity = anchor ?? AnchorEntity(world: .zero)
+			
+			if anchorEntity.children.isEmpty {
+				// SIZING: 3.5mm (Only ~1.3mm larger than the line dots for a sleek look)
+				anchorEntity.addChild(Self.makeDotEntity(radius: 0.0035))
+			}
+			
+			anchorEntity.position = point
+			
+			if anchor == nil {
+				arView.scene.addAnchor(anchorEntity)
+				anchor = anchorEntity
 			}
 		}
 		
+		
 		private func updateLine(in arView: ARView) {
 			guard let start = viewModel.startPoint, let end = viewModel.endPoint ?? viewModel.livePoint else {
-				if let lineAnchor {
-					arView.scene.removeAnchor(lineAnchor)
-				}
+				lineAnchor?.removeFromParent()
 				lineAnchor = nil
 				return
 			}
@@ -632,53 +621,51 @@ struct ARMeasurementView: UIViewRepresentable {
 			let delta = end - start
 			let distance = simd_length(delta)
 			
-			guard distance > 0.001 else {
-				if let lineAnchor {
-					arView.scene.removeAnchor(lineAnchor)
-				}
+			guard distance > 0.002 else {
+				lineAnchor?.removeFromParent()
 				lineAnchor = nil
 				return
 			}
 			
-				let midpoint = (start + end) / 2
-				let direction = simd_normalize(delta)
-				let isLocked = viewModel.endPoint != nil
-				
-				let anchorEntity = lineAnchor ?? AnchorEntity(world: .zero)
-				anchorEntity.children.removeAll()
-				
-				if isLocked {
-					let lineEntity = ModelEntity(
-						mesh: .generateCylinder(height: distance, radius: 0.0010),
-						materials: [Self.lineMaterial(color: .white)]
-					)
-					anchorEntity.addChild(lineEntity)
-				} else {
-					let dashLength: Float = 0.010
-					let gapLength: Float = 0.006
-					let lineRadius: Float = 0.0010
-					let step = dashLength + gapLength
-					var offset = (-distance / 2) + (dashLength / 2)
-					
-					while offset < (distance / 2) {
-						let remaining = (distance / 2) - offset
-						let segmentLength = min(dashLength, remaining * 2)
-						guard segmentLength > 0.003 else { break }
-						
-						let dashEntity = ModelEntity(
-							mesh: .generateCylinder(height: segmentLength, radius: lineRadius),
-							materials: [Self.lineMaterial(color: .white)]
-						)
-						dashEntity.position.y = offset
-						anchorEntity.addChild(dashEntity)
-						offset += step
-					}
+			let anchorEntity = lineAnchor ?? AnchorEntity(world: .zero)
+			anchorEntity.children.removeAll()
+			
+			// --- SIZING CONSTANTS ---
+			let liveDotRadius: Float = 0.0022    // 2.2mm (slightly larger than before)
+			let solidLineThickness: Float = 0.0015 // 1.5mm thin solid line
+			let dotSpacing: Float = 0.010       // 1cm gap
+			
+			if viewModel.endPoint == nil {
+				// STYLE: DASHED (Measurement in progress)
+				let dotCount = Int(distance / dotSpacing)
+				for i in 0...dotCount {
+					let fraction = Float(i) / Float(dotCount)
+					let position = start + (delta * fraction)
+					let dot = Self.makeDotEntity(radius: liveDotRadius)
+					dot.position = position
+					anchorEntity.addChild(dot)
 				}
+			} else {
+				// STYLE: SOLID (Measurement fixed)
+				let lineMesh = MeshResource.generateCylinder(height: distance, radius: solidLineThickness)
+				let material = UnlitMaterial(color: .white.withAlphaComponent(0.9)) // Slight transparency looks premium
+				let lineModel = ModelEntity(mesh: lineMesh, materials: [material])
 				
-				anchorEntity.position = midpoint
-				anchorEntity.orientation = simd_quatf(from: SIMD3<Float>(0, 1, 0), to: direction)
+				// Position the line halfway between points
+				lineModel.position = start + (delta / 2)
 				
-				if lineAnchor == nil {
+				// Rotate the cylinder to point from start to end
+				// By default, cylinders are vertical (Y-axis), so we make it "look at" the end point
+				lineModel.look(at: end, from: lineModel.position, relativeTo: nil)
+				
+				// Adjust the rotation because 'look' points the Z-axis,
+				// but our cylinder's length is on the Y-axis.
+				lineModel.orientation *= simd_quatf(angle: .pi / 2, axis: [1, 0, 0])
+				
+				anchorEntity.addChild(lineModel)
+			}
+			
+			if lineAnchor == nil {
 				arView.scene.addAnchor(anchorEntity)
 				lineAnchor = anchorEntity
 			}
@@ -692,15 +679,56 @@ struct ARMeasurementView: UIViewRepresentable {
 			)
 		}
 		
-		private static func pointMaterial(color: UIColor) -> SimpleMaterial {
-			SimpleMaterial(color: color, roughness: 0.15, isMetallic: false)
+		private static func pointMaterial(color: UIColor) -> UnlitMaterial {
+			UnlitMaterial(color: color)
 		}
 		
-		private static func lineMaterial(color: UIColor) -> SimpleMaterial {
-			SimpleMaterial(color: color, roughness: 0.2, isMetallic: false)
+		private static func makeDotEntity(radius: Float) -> Entity {
+			// 1. Create a cylinder with tiny height. It's effectively a 2D disc.
+			// Increased sides (default is 64) for a perfectly smooth circle.
+			let mesh = MeshResource.generateCylinder(height: 0.00001, radius: radius)
+			let material = UnlitMaterial(color: .white)
+			let model = ModelEntity(mesh: mesh, materials: [material])
+			
+			// 2. RealityKit cylinders have their circular face on the Y-axis.
+			// The look(at:) logic points the Z-axis at the camera.
+			// We rotate the model 90 degrees so the circular face points forward.
+			model.orientation = simd_quatf(angle: .pi / 2, axis: [1, 0, 0])
+			
+			// 3. Wrap it in a container for the Billboard logic
+			let container = Entity()
+			container.addChild(model)
+			container.components.set(BillboardComponent())
+			
+			return container
+		}
+		
+		private func updateBillboards() {
+			guard let arView = arView,
+					let frame = arView.session.currentFrame else { return }
+			
+			// Get the camera's position from the current AR frame transform
+			let cameraTransform = frame.camera.transform
+			let cameraPosition = SIMD3<Float>(cameraTransform.columns.3.x,
+											  cameraTransform.columns.3.y,
+											  cameraTransform.columns.3.z)
+			
+			let query = EntityQuery(where: .has(BillboardComponent.self))
+			arView.scene.performQuery(query).forEach { entity in
+				// Always face the camera position
+				entity.look(at: cameraPosition,
+							from: entity.position(relativeTo: nil),
+							relativeTo: nil)
+			}
 		}
 	}
 }
+
+// MARK: - Billboard Logic
+
+struct BillboardComponent: Component {}
+
+
 
 #else
 import SwiftUI
