@@ -159,7 +159,7 @@ extension ARMeasurementCoordinator: ARSessionDelegate {
             return
         }
 
-        if viewModel.endPoint != nil {
+        if viewModel.hasCompletedMeasurement {
             return
         }
 

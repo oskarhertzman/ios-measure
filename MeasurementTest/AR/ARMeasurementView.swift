@@ -33,6 +33,7 @@ final class ARMeasurementCoordinator: NSObject {
     var displayLink: CADisplayLink?
 
     var meshEntities: [UUID: ModelEntity] = [:]
+    var savedMeasurementAnchors: [UUID: AnchorEntity] = [:]
 
     var startAnchor: AnchorEntity?
     var endAnchor: AnchorEntity?
@@ -43,9 +44,7 @@ final class ARMeasurementCoordinator: NSObject {
 
     var frameCounter = 0
     static var textCache: [String: MeshResource] = [:]
-    var lastRenderedStartPoint: SIMD3<Float>?
-    var lastRenderedEndPoint: SIMD3<Float>?
-    var lastRenderedIsLocked = false
+    var lastRenderedSignature = ""
 
     init(viewModel: MeasurementViewModel) {
         self.viewModel = viewModel
@@ -76,8 +75,9 @@ final class ARMeasurementCoordinator: NSObject {
         guard let arView else { return }
 
         updatePointAnchor(&startAnchor, point: viewModel.startPoint, in: arView)
-        updatePointAnchor(&endAnchor, point: viewModel.endPoint ?? (viewModel.startPoint == nil ? nil : viewModel.livePoint), in: arView)
+        updatePointAnchor(&endAnchor, point: viewModel.currentTargetPoint, in: arView)
         updateLine(in: arView)
+        syncSavedMeasurements(in: arView)
     }
 }
 #endif

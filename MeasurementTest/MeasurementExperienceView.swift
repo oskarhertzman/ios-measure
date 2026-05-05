@@ -38,13 +38,13 @@ struct MeasurementExperienceView: View {
                     .monospacedDigit()
                     .foregroundStyle(.white)
 
-                Text(viewModel.endPoint == nil && viewModel.startPoint != nil ? "live" : "fixed")
+                Text(viewModel.shouldShowLiveSegment && viewModel.startPoint != nil ? "live" : "fixed")
                     .font(.caption.weight(.semibold))
                     .textCase(.uppercase)
                     .foregroundStyle(.black)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
-                    .background(viewModel.endPoint == nil && viewModel.startPoint != nil ? Color.green : Color.white.opacity(0.85))
+                    .background(viewModel.shouldShowLiveSegment && viewModel.startPoint != nil ? Color.green : Color.white.opacity(0.85))
                     .clipShape(Capsule())
             }
 
@@ -83,21 +83,42 @@ struct MeasurementExperienceView: View {
                 .foregroundStyle(.white.opacity(0.86))
 
             HStack(spacing: 12) {
-                Button(action: viewModel.placeCurrentPoint) {
-                    Text(viewModel.startPoint == nil ? "Set Start Point" : (viewModel.endPoint == nil ? "Set End Point" : "Start New Measure"))
-                        .font(.headline)
+                Button(action: primaryAction) {
+                    Text(
+                        viewModel.fixedPoints.isEmpty
+                            ? "Set Start Point"
+                            : (viewModel.shouldShowLiveSegment ? "Set Point" : "New Measure")
+                    )
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
+                        .padding(.vertical, 14)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.white)
                 .foregroundStyle(.black)
-                .disabled(!viewModel.canPlacePoint)
+                .disabled(viewModel.fixedPoints.isEmpty ? !viewModel.canPlacePoint : (viewModel.shouldShowLiveSegment ? !viewModel.canPlacePoint : false))
+
+                if viewModel.hasCompletedMeasurement {
+                    Button(action: viewModel.beginAdditionalPoint) {
+                        Text("Add Point")
+                            .font(.subheadline.weight(.semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.white)
+                    .foregroundStyle(.white)
+                    .disabled(!viewModel.canAddAdditionalPoint)
+                }
 
                 Button(action: viewModel.resetMeasurement) {
                     Image(systemName: "arrow.counterclockwise")
-                        .font(.headline)
-                        .frame(width: 56, height: 56)
+                        .font(.subheadline.weight(.semibold))
+                        .frame(width: 52, height: 52)
                 }
                 .buttonStyle(.bordered)
                 .tint(.white)
@@ -128,6 +149,10 @@ struct MeasurementExperienceView: View {
         }
         .shadow(color: .black.opacity(0.35), radius: 8)
         .allowsHitTesting(false)
+    }
+
+    private var primaryAction: () -> Void {
+        viewModel.hasCompletedMeasurement ? viewModel.startNewMeasurement : viewModel.placeCurrentPoint
     }
 }
 
