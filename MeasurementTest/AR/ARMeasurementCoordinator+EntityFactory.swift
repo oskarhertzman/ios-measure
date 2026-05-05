@@ -3,14 +3,16 @@ import RealityKit
 import UIKit
 
 extension ARMeasurementCoordinator {
-    static func pointMaterial(color: UIColor) -> UnlitMaterial {
-        UnlitMaterial(color: color)
-    }
+    private static let whiteDotMaterial = UnlitMaterial(color: .white)
+    private static let tickMaterial = UnlitMaterial(color: .white.withAlphaComponent(0.9))
+    private static let textMaterial = UnlitMaterial(color: .white)
+    private static var dotMeshCache: [Float: MeshResource] = [:]
+    private static var tickMeshCache: [Float: MeshResource] = [:]
+    private static var lineMeshCache: [Int: MeshResource] = [:]
 
     static func makeDotEntity(radius: Float) -> Entity {
-        let mesh = MeshResource.generateCylinder(height: 0.00001, radius: radius)
-        let material = UnlitMaterial(color: .white)
-        let model = ModelEntity(mesh: mesh, materials: [material])
+        let mesh = cachedDotMesh(radius: radius)
+        let model = ModelEntity(mesh: mesh, materials: [whiteDotMaterial])
         model.orientation = simd_quatf(angle: .pi / 2, axis: [1, 0, 0])
 
         let container = Entity()
@@ -21,10 +23,8 @@ extension ARMeasurementCoordinator {
 
     static func makeTickEntity(height: Float) -> Entity {
         let width: Float = 0.0012
-        let mesh = MeshResource.generatePlane(width: width, depth: height)
-        let material = UnlitMaterial(color: .white.withAlphaComponent(0.9))
-        let model = ModelEntity(mesh: mesh, materials: [material])
-        model.orientation = simd_quatf(angle: .pi / 2, axis: [1, 0, 0])
+        let mesh = cachedTickMesh(height: height, width: width)
+        let model = ModelEntity(mesh: mesh, materials: [tickMaterial])
         model.position.y = -(height / 2)
 
         let container = Entity()
@@ -43,7 +43,8 @@ extension ARMeasurementCoordinator {
             textCache[text] = mesh
         }
 
-        let model = ModelEntity(mesh: mesh, materials: [UnlitMaterial(color: .white)])
+        let model = ModelEntity(mesh: mesh, materials: [textMaterial])
+        model.orientation = simd_quatf(angle: .pi, axis: [0, 1, 0])
         let bounds = model.visualBounds(relativeTo: nil)
         let width = bounds.max.x - bounds.min.x
         model.position.x = -(width / 2)
@@ -53,6 +54,42 @@ extension ARMeasurementCoordinator {
         container.addChild(model)
         container.components.set(BillboardComponent())
         return container
+    }
+
+    static func makeLineEntity(length: Float) -> ModelEntity {
+        let mesh = cachedLineMesh(length: length)
+        return ModelEntity(mesh: mesh, materials: [whiteDotMaterial])
+    }
+
+    private static func cachedDotMesh(radius: Float) -> MeshResource {
+        if let mesh = dotMeshCache[radius] {
+            return mesh
+        }
+
+        let mesh = MeshResource.generateCylinder(height: 0.00001, radius: radius)
+        dotMeshCache[radius] = mesh
+        return mesh
+    }
+
+    private static func cachedTickMesh(height: Float, width: Float) -> MeshResource {
+        if let mesh = tickMeshCache[height] {
+            return mesh
+        }
+
+        let mesh = MeshResource.generateBox(size: [width, height, 0.00035])
+        tickMeshCache[height] = mesh
+        return mesh
+    }
+
+    private static func cachedLineMesh(length: Float) -> MeshResource {
+        let quantizedLength = Int((length * 1_000).rounded())
+        if let mesh = lineMeshCache[quantizedLength] {
+            return mesh
+        }
+
+        let mesh = MeshResource.generateCylinder(height: Float(quantizedLength) / 1_000, radius: 0.0008)
+        lineMeshCache[quantizedLength] = mesh
+        return mesh
     }
 }
 #endif

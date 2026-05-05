@@ -4,6 +4,12 @@ import RealityKit
 import UIKit
 
 extension ARMeasurementCoordinator {
+    func invalidateRenderedSceneState() {
+        lastRenderedStartPoint = nil
+        lastRenderedEndPoint = nil
+        lastRenderedIsLocked = false
+    }
+
     func updatePointAnchor(_ anchor: inout AnchorEntity?, point: SIMD3<Float>?, in arView: ARView) {
         guard let point else {
             if let anchor { arView.scene.removeAnchor(anchor) }
@@ -28,18 +34,37 @@ extension ARMeasurementCoordinator {
         guard let start = viewModel.startPoint, let end = viewModel.endPoint ?? viewModel.livePoint else {
             lineAnchor?.removeFromParent()
             lineAnchor = nil
+            invalidateRenderedSceneState()
             return
         }
 
         let delta = end - start
         let distance = simd_length(delta)
-        guard distance > 0.002 else { return }
+        guard distance > 0.002 else {
+            lineAnchor?.removeFromParent()
+            lineAnchor = nil
+            invalidateRenderedSceneState()
+            return
+        }
+
+        let isLocked = viewModel.endPoint != nil
+        if let lastRenderedStartPoint,
+           let lastRenderedEndPoint,
+           simd_distance(lastRenderedStartPoint, start) < 0.0005,
+           simd_distance(lastRenderedEndPoint, end) < 0.0005,
+           lastRenderedIsLocked == isLocked {
+            return
+        }
+
+        lastRenderedStartPoint = start
+        lastRenderedEndPoint = end
+        lastRenderedIsLocked = isLocked
 
         let direction = simd_normalize(delta)
         let anchorEntity = lineAnchor ?? AnchorEntity(world: .zero)
         anchorEntity.children.removeAll()
 
-        if viewModel.endPoint == nil {
+        if !isLocked {
             let dotSpacing: Float = 0.010
             let dotCount = Int(distance / dotSpacing)
 
@@ -51,8 +76,7 @@ extension ARMeasurementCoordinator {
                 anchorEntity.addChild(dot)
             }
         } else {
-            let lineMesh = MeshResource.generateCylinder(height: distance, radius: 0.0008)
-            let lineModel = ModelEntity(mesh: lineMesh, materials: [UnlitMaterial(color: .white)])
+            let lineModel = Self.makeLineEntity(length: distance)
             lineModel.position = start + (delta / 2)
             lineModel.look(at: end, from: lineModel.position, relativeTo: nil)
             lineModel.orientation *= simd_quatf(angle: .pi / 2, axis: [1, 0, 0])
@@ -85,6 +109,8 @@ extension ARMeasurementCoordinator {
             arView.scene.addAnchor(anchorEntity)
             lineAnchor = anchorEntity
         }
+
+        updateBillboards()
     }
 
     func updateBillboards() {

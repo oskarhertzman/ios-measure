@@ -43,6 +43,9 @@ final class ARMeasurementCoordinator: NSObject {
 
     var frameCounter = 0
     static var textCache: [String: MeshResource] = [:]
+    var lastRenderedStartPoint: SIMD3<Float>?
+    var lastRenderedEndPoint: SIMD3<Float>?
+    var lastRenderedIsLocked = false
 
     init(viewModel: MeasurementViewModel) {
         self.viewModel = viewModel

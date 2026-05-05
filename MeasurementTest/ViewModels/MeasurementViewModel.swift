@@ -35,12 +35,13 @@ final class MeasurementViewModel: ObservableObject {
         }
     }
 
-    func updateLivePoint(_ point: SIMD3<Float>?, confidence: SurfaceConfidence) {
+    @discardableResult
+    func updateLivePoint(_ point: SIMD3<Float>?, confidence: SurfaceConfidence) -> Bool {
         if let point, let oldPoint = livePoint, simd_distance(point, oldPoint) < 0.001 {
-            return
+            return false
         }
 
-        guard endPoint == nil else { return }
+        guard endPoint == nil else { return false }
 
         livePoint = point
         confidenceLevel = confidence
@@ -56,6 +57,7 @@ final class MeasurementViewModel: ObservableObject {
         }
 
         refreshDistance()
+        return true
     }
 
     func placeCurrentPoint() {

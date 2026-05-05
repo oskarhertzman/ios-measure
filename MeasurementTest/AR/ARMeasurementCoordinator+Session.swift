@@ -143,6 +143,7 @@ extension ARMeasurementCoordinator: ARSessionDelegate {
     @objc
     func handleTap() {
         viewModel.placeCurrentPoint()
+        invalidateRenderedSceneState()
         syncSceneContent()
     }
 
@@ -152,8 +153,13 @@ extension ARMeasurementCoordinator: ARSessionDelegate {
         guard frameCounter % 2 == 0 else { return }
 
         guard let arView, viewModel.isLidarAvailable else { return }
+        defer { updateBillboards() }
 
-        if viewModel.endPoint != nil || arView.bounds.size == .zero {
+        if arView.bounds.size == .zero {
+            return
+        }
+
+        if viewModel.endPoint != nil {
             return
         }
 
@@ -173,16 +179,17 @@ extension ARMeasurementCoordinator: ARSessionDelegate {
             confidence = .low
         }
 
+        let didUpdateLivePoint: Bool
         if let hitPoint {
             let stabilizedPoint = stabilizePoint(hitPoint)
-            viewModel.updateLivePoint(stabilizedPoint, confidence: confidence)
+            didUpdateLivePoint = viewModel.updateLivePoint(stabilizedPoint, confidence: confidence)
         } else {
             recentHits.removeAll()
-            viewModel.updateLivePoint(nil, confidence: .unknown)
+            didUpdateLivePoint = viewModel.updateLivePoint(nil, confidence: .unknown)
         }
 
+        guard didUpdateLivePoint else { return }
         syncSceneContent()
-        updateBillboards()
     }
 }
 #endif
