@@ -176,6 +176,10 @@ final class MeasurementViewModel: ObservableObject {
 	}
 	
 	func updateLivePoint(_ point: SIMD3<Float>?, confidence: SurfaceConfidence) {
+		if let p = point, let oldP = livePoint, simd_distance(p, oldP) < 0.001 {
+			return // Don't trigger SwiftUI if move is < 1mm
+		}
+		
 		guard endPoint == nil else { return }
 		
 		livePoint = point
@@ -302,6 +306,10 @@ struct ARMeasurementView: UIViewRepresentable {
 		// Stabilization: average recent hits to reduce jitter
 		private var recentHits: [SIMD3<Float>] = []
 		private let maxRecentHits = 5
+		
+		// Performance
+		private var frameCounter = 0
+		private static var textCache: [String: MeshResource] = [:]
 		
 		init(viewModel: MeasurementViewModel) {
 			self.viewModel = viewModel
@@ -477,6 +485,9 @@ struct ARMeasurementView: UIViewRepresentable {
 		
 		@objc
 		private func updateLiveMeasurement() {
+			frameCounter += 1
+			guard frameCounter % 2 == 0 else { return } // Run at 30fps instead of 60fps (or 120fps)
+			
 			guard let arView, viewModel.isLidarAvailable else { return }
 			
 			if viewModel.endPoint != nil || arView.bounds.size == .zero {
@@ -757,11 +768,16 @@ struct ARMeasurementView: UIViewRepresentable {
 		}
 		
 		private static func makeTextEntity(_ text: String) -> Entity {
-			// Small, bold font to match the system look
-			let font = UIFont.systemFont(ofSize: 0.008, weight: .bold)
-			let mesh = MeshResource.generateText(text, extrusionDepth: 0.0001, font: font)
-			let material = UnlitMaterial(color: .white.withAlphaComponent(0.8))
-			let model = ModelEntity(mesh: mesh, materials: [material])
+			let mesh: MeshResource
+			if let cached = textCache[text] {
+				mesh = cached
+			} else {
+				let font = UIFont.systemFont(ofSize: 0.008, weight: .bold)
+				mesh = MeshResource.generateText(text, extrusionDepth: 0.0001, font: font)
+				textCache[text] = mesh
+			}
+			
+			let model = ModelEntity(mesh: mesh, materials: [UnlitMaterial(color: .white)])
 			
 			// Center the text horizontally
 			let bounds = model.visualBounds(relativeTo: nil)
