@@ -621,48 +621,62 @@ struct ARMeasurementView: UIViewRepresentable {
 			let delta = end - start
 			let distance = simd_length(delta)
 			
-			guard distance > 0.002 else {
-				lineAnchor?.removeFromParent()
-				lineAnchor = nil
-				return
-			}
+			// Safety check for very small distances
+			guard distance > 0.002 else { return }
+			
+			let direction = simd_normalize(delta)
 			
 			let anchorEntity = lineAnchor ?? AnchorEntity(world: .zero)
 			anchorEntity.children.removeAll()
 			
-			// --- SIZING CONSTANTS ---
-			let liveDotRadius: Float = 0.0022    // 2.2mm (slightly larger than before)
-			let solidLineThickness: Float = 0.0015 // 1.5mm thin solid line
-			let dotSpacing: Float = 0.010       // 1cm gap
-			
 			if viewModel.endPoint == nil {
-				// STYLE: DASHED (Measurement in progress)
+				// --- DASHED LIVE LINE (While measuring) ---
+				let dotSpacing: Float = 0.010 // 1cm spacing
 				let dotCount = Int(distance / dotSpacing)
+				
 				for i in 0...dotCount {
-					let fraction = Float(i) / Float(dotCount)
-					let position = start + (delta * fraction)
-					let dot = Self.makeDotEntity(radius: liveDotRadius)
+					let offset = Float(i) * dotSpacing
+					let position = start + (direction * offset)
+					
+					// Use the small 2D-style circle dot
+					let dot = Self.makeDotEntity(radius: 0.0022)
 					dot.position = position
 					anchorEntity.addChild(dot)
 				}
 			} else {
-				// STYLE: SOLID (Measurement fixed)
-				let lineMesh = MeshResource.generateCylinder(height: distance, radius: solidLineThickness)
-				let material = UnlitMaterial(color: .white.withAlphaComponent(0.9)) // Slight transparency looks premium
-				let lineModel = ModelEntity(mesh: lineMesh, materials: [material])
+				// --- SOLID FINALIZED LINE WITH RULER TICKS (After setting) ---
 				
-				// Position the line halfway between points
+				// 1. The Solid Main Line
+				let lineMesh = MeshResource.generateCylinder(height: distance, radius: 0.0008)
+				let lineModel = ModelEntity(mesh: lineMesh, materials: [UnlitMaterial(color: .white)])
 				lineModel.position = start + (delta / 2)
-				
-				// Rotate the cylinder to point from start to end
-				// By default, cylinders are vertical (Y-axis), so we make it "look at" the end point
 				lineModel.look(at: end, from: lineModel.position, relativeTo: nil)
-				
-				// Adjust the rotation because 'look' points the Z-axis,
-				// but our cylinder's length is on the Y-axis.
 				lineModel.orientation *= simd_quatf(angle: .pi / 2, axis: [1, 0, 0])
-				
 				anchorEntity.addChild(lineModel)
+				
+				// 2. The Hierarchical Ruler Logic
+				let cmSpacing: Float = 0.01 // 1cm
+				let totalCm = Int(distance / cmSpacing)
+				
+				for i in 1...totalCm {
+					let offset = Float(i) * cmSpacing
+					let position = start + (direction * offset)
+					
+					var tickHeight: Float = 0.005 // Default 1cm (Shortest)
+					
+					if i % 10 == 0 {
+						tickHeight = 0.014 // 10cm (Longest)
+						let label = Self.makeTextEntity("\(i)")
+						label.position = position
+						anchorEntity.addChild(label)
+					} else if i % 5 == 0 {
+						tickHeight = 0.009 // 5cm (Medium)
+					}
+					
+					let tick = Self.makeTickEntity(height: tickHeight)
+					tick.position = position
+					anchorEntity.addChild(tick)
+				}
 			}
 			
 			if lineAnchor == nil {
@@ -720,6 +734,47 @@ struct ARMeasurementView: UIViewRepresentable {
 							from: entity.position(relativeTo: nil),
 							relativeTo: nil)
 			}
+		}
+		
+		private static func makeTickEntity(height: Float) -> Entity {
+			let width: Float = 0.0012 // Consistent thickness
+			let mesh = MeshResource.generatePlane(width: width, depth: height)
+			let material = UnlitMaterial(color: .white.withAlphaComponent(0.9))
+			let model = ModelEntity(mesh: mesh, materials: [material])
+			
+			// 1. Rotate to face the camera (Billboard setup)
+			model.orientation = simd_quatf(angle: .pi / 2, axis: [1, 0, 0])
+			
+			// 2. OFFSET: Move the tick down so the top edge touches the line
+			// Since the plane is centered, moving it down by height/2 makes the top stay at 0
+			model.position.y = -(height / 2)
+			
+			let container = Entity()
+			container.addChild(model)
+			container.components.set(BillboardComponent())
+			
+			return container
+		}
+		
+		private static func makeTextEntity(_ text: String) -> Entity {
+			// Small, bold font to match the system look
+			let font = UIFont.systemFont(ofSize: 0.008, weight: .bold)
+			let mesh = MeshResource.generateText(text, extrusionDepth: 0.0001, font: font)
+			let material = UnlitMaterial(color: .white.withAlphaComponent(0.8))
+			let model = ModelEntity(mesh: mesh, materials: [material])
+			
+			// Center the text horizontally
+			let bounds = model.visualBounds(relativeTo: nil)
+			let width = bounds.max.x - bounds.min.x
+			model.position.x = -(width / 2)
+			
+			// Position it below the longest tick (approx 1.8cm down)
+			model.position.y = -0.018
+			
+			let container = Entity()
+			container.addChild(model)
+			container.components.set(BillboardComponent())
+			return container
 		}
 	}
 }
