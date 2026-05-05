@@ -159,6 +159,10 @@ extension ARMeasurementCoordinator: ARSessionDelegate {
             return
         }
 
+        if viewModel.isSceneUpdatesSuspended {
+            return
+        }
+
         if viewModel.hasCompletedMeasurement {
             return
         }

@@ -12,6 +12,7 @@ final class MeasurementViewModel: ObservableObject {
     @Published private(set) var instructionText = "Move the device slowly to scan surfaces, then align the reticle."
     @Published private(set) var confidenceLevel: SurfaceConfidence = .unknown
     @Published var isLidarAvailable = ARWorldTrackingConfiguration.supportsSceneReconstruction(.mesh)
+    @Published var isSceneUpdatesSuspended = false
     @Published private(set) var isAwaitingAdditionalPoint = false
 
     var startPoint: SIMD3<Float>? {
@@ -36,6 +37,10 @@ final class MeasurementViewModel: ObservableObject {
 
     var canAddAdditionalPoint: Bool {
         hasCompletedMeasurement && livePoint != nil && confidenceLevel != .low
+    }
+
+    var canSaveMeasurement: Bool {
+        hasCompletedMeasurement
     }
 
     var canPlacePoint: Bool {
@@ -88,11 +93,6 @@ final class MeasurementViewModel: ObservableObject {
     }
 
     func placeCurrentPoint() {
-        if hasCompletedMeasurement {
-            startNewMeasurement()
-            return
-        }
-
         guard isLidarAvailable else {
             instructionText = "LiDAR scanner required for this feature."
             return
@@ -114,17 +114,10 @@ final class MeasurementViewModel: ObservableObject {
         } else {
             fixedPoints.append(livePoint)
             isAwaitingAdditionalPoint = false
-            instructionText = "Measurement complete. Add a point or start a new measure."
+            instructionText = "Measurement complete. Save it or add another point."
         }
 
         refreshDistance()
-    }
-
-    func startNewMeasurement() {
-        if hasCompletedMeasurement {
-            archiveCurrentMeasurement()
-        }
-        resetMeasurement()
     }
 
     func beginAdditionalPoint() {
@@ -136,9 +129,16 @@ final class MeasurementViewModel: ObservableObject {
         refreshDistance()
     }
 
-    func archiveCurrentMeasurement() {
+    func saveCurrentMeasurement(named name: String) {
         guard fixedPoints.count >= 2 else { return }
-        savedMeasurements.append(SavedMeasurement(points: fixedPoints))
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let finalName = trimmedName.isEmpty ? defaultMeasurementName : trimmedName
+        savedMeasurements.append(SavedMeasurement(name: finalName, points: fixedPoints))
+        resetMeasurement()
+    }
+
+    func clearSavedMeasurements() {
+        savedMeasurements.removeAll()
     }
 
     func resetMeasurement() {
@@ -183,6 +183,10 @@ final class MeasurementViewModel: ObservableObject {
             return String(format: "%.2f m", meters)
         }
         return String(format: "%.1f cm", meters * 100)
+    }
+
+    var defaultMeasurementName: String {
+        "Measurement \(savedMeasurements.count + 1)"
     }
 }
 #endif

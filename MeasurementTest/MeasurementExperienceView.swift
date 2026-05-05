@@ -1,8 +1,13 @@
 #if os(iOS)
 import SwiftUI
+import UIKit
 
 struct MeasurementExperienceView: View {
     @StateObject private var viewModel = MeasurementViewModel()
+    @State private var isSavedMeasurementsPresented = false
+    @State private var isSavePromptPresented = false
+    @State private var pendingMeasurementName = ""
+    @State private var impactGenerator = UIImpactFeedbackGenerator(style: .light)
 
     var body: some View {
         ZStack {
@@ -18,8 +23,55 @@ struct MeasurementExperienceView: View {
             .padding(.vertical, 24)
 
             reticle
+
+			VStack {
+				HStack {
+					Spacer()
+					menuButton
+				}
+				Spacer()
+			}
+            .padding(.horizontal, 20)
+            .padding(.vertical, 24)
         }
         .background(Color.black)
+        .sheet(isPresented: $isSavedMeasurementsPresented) {
+            SavedMeasurementsSheet(
+                measurements: viewModel.savedMeasurements,
+                onClearAll: viewModel.clearSavedMeasurements
+            )
+        }
+        .sheet(isPresented: $isSavePromptPresented) {
+            SaveMeasurementSheet(
+                name: $pendingMeasurementName,
+                onCancel: { isSavePromptPresented = false },
+                onSave: {
+                    viewModel.saveCurrentMeasurement(named: pendingMeasurementName)
+                    isSavePromptPresented = false
+                }
+            )
+        }
+        .onAppear {
+            impactGenerator.prepare()
+        }
+        .onChange(of: isSavedMeasurementsPresented) { _, _ in
+            updateSceneSuspensionState()
+        }
+        .onChange(of: isSavePromptPresented) { _, _ in
+            updateSceneSuspensionState()
+        }
+    }
+
+    private var menuButton: some View {
+        Button {
+            isSavedMeasurementsPresented = true
+        } label: {
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 18, weight: .semibold))
+                .frame(width: 46, height: 46)
+                .background(.black.opacity(0), in: Circle())
+        }
+        .foregroundStyle(.white)
     }
 
     private var topPanel: some View {
@@ -83,25 +135,36 @@ struct MeasurementExperienceView: View {
                 .foregroundStyle(.white.opacity(0.86))
 
             HStack(spacing: 12) {
-                Button(action: primaryAction) {
-                    Text(
-                        viewModel.fixedPoints.isEmpty
-                            ? "Set Start Point"
-                            : (viewModel.shouldShowLiveSegment ? "Set Point" : "New Measure")
-                    )
-                        .font(.subheadline.weight(.semibold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
+                if !viewModel.hasCompletedMeasurement {
+                    Button(action: handlePrimaryAction) {
+                        Text(viewModel.fixedPoints.isEmpty ? "Set Start Point" : "Set Point")
+                            .font(.subheadline.weight(.semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.white)
+                    .foregroundStyle(.black)
+                    .disabled(!viewModel.canPlacePoint)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.white)
-                .foregroundStyle(.black)
-                .disabled(viewModel.fixedPoints.isEmpty ? !viewModel.canPlacePoint : (viewModel.shouldShowLiveSegment ? !viewModel.canPlacePoint : false))
 
                 if viewModel.hasCompletedMeasurement {
-                    Button(action: viewModel.beginAdditionalPoint) {
+                    Button(action: handleSaveMeasurement) {
+                        Text("Save")
+                            .font(.subheadline.weight(.semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.white)
+                    .foregroundStyle(.black)
+                    .disabled(!viewModel.canSaveMeasurement)
+
+                    Button(action: handleAddPoint) {
                         Text("Add Point")
                             .font(.subheadline.weight(.semibold))
                             .lineLimit(1)
@@ -151,8 +214,123 @@ struct MeasurementExperienceView: View {
         .allowsHitTesting(false)
     }
 
-    private var primaryAction: () -> Void {
-        viewModel.hasCompletedMeasurement ? viewModel.startNewMeasurement : viewModel.placeCurrentPoint
+    private func handlePrimaryAction() {
+        playLightHaptic()
+        viewModel.placeCurrentPoint()
+    }
+
+    private func handleSaveMeasurement() {
+        playLightHaptic()
+        pendingMeasurementName = viewModel.defaultMeasurementName
+        isSavePromptPresented = true
+    }
+
+    private func handleAddPoint() {
+        playLightHaptic()
+        viewModel.beginAdditionalPoint()
+    }
+
+    private func playLightHaptic() {
+        impactGenerator.impactOccurred()
+        impactGenerator.prepare()
+    }
+
+    private func updateSceneSuspensionState() {
+        viewModel.isSceneUpdatesSuspended = isSavedMeasurementsPresented || isSavePromptPresented
+    }
+}
+
+private struct SavedMeasurementsSheet: View {
+    let measurements: [SavedMeasurement]
+    let onClearAll: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if measurements.isEmpty {
+                    ContentUnavailableView(
+                        "No Saved Measurements",
+                        systemImage: "ruler",
+                        description: Text("Save a measurement to see it here.")
+                    )
+                } else {
+                    List(measurements) { measurement in
+                        HStack(alignment: .center, spacing: 12) {
+                            Image(systemName: "ruler")
+                                .font(.headline)
+                                .foregroundStyle(.black.opacity(0.8))
+                                .frame(width: 28, height: 28)
+                                .background(Color.black.opacity(0.06), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(measurement.name)
+                                    .font(.headline)
+                                Text(measurement.lengthText)
+                                    .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            }
+                        }
+                        .listRowBackground(Color.white)
+                    }
+                    .scrollContentBackground(.hidden)
+                    .background(Color.white)
+                }
+            }
+            .background(Color.white)
+            .navigationTitle("Saved Measurements")
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    if !measurements.isEmpty {
+                        Button("Clear All", role: .destructive, action: onClearAll)
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .background(Color.white)
+    }
+}
+
+private struct SaveMeasurementSheet: View {
+    @Binding var name: String
+    let onCancel: () -> Void
+    let onSave: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 20) {
+                Text("Enter a name for this measurement.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                TextField("Measurement name", text: $name)
+                    .textFieldStyle(.roundedBorder)
+
+                Spacer()
+            }
+            .padding(24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(Color.white)
+            .navigationTitle("Save Measurement")
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel", action: onCancel)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Save", action: onSave)
+                }
+            }
+        }
+        .presentationDetents([.fraction(0.28)])
+        .presentationDragIndicator(.visible)
+        .background(Color.white)
     }
 }
 

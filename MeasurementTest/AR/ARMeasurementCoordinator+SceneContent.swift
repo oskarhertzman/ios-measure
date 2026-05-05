@@ -67,23 +67,9 @@ extension ARMeasurementCoordinator {
     }
 
     func syncSavedMeasurements(in arView: ARView) {
-        let savedMeasurements = viewModel.savedMeasurements
-        let savedIDs = Set(savedMeasurements.map(\.id))
-
-        for (id, anchor) in savedMeasurementAnchors where !savedIDs.contains(id) {
+        for (id, anchor) in savedMeasurementAnchors {
             arView.scene.removeAnchor(anchor)
             savedMeasurementAnchors.removeValue(forKey: id)
-        }
-
-        for measurement in savedMeasurements {
-            let anchorEntity = savedMeasurementAnchors[measurement.id] ?? AnchorEntity(world: .zero)
-            anchorEntity.children.removeAll()
-            populateLockedMeasurement(into: anchorEntity, points: measurement.points)
-
-            if savedMeasurementAnchors[measurement.id] == nil {
-                arView.scene.addAnchor(anchorEntity)
-                savedMeasurementAnchors[measurement.id] = anchorEntity
-            }
         }
     }
 
