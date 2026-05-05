@@ -599,11 +599,11 @@ struct ARMeasurementView: UIViewRepresentable {
 				let anchorEntity = anchor ?? AnchorEntity(world: .zero)
 				if anchorEntity.children.isEmpty {
 					let ring = ModelEntity(
-						mesh: .generateSphere(radius: 0.018),
+						mesh: .generateSphere(radius: 0.008),
 						materials: [SimpleMaterial(color: .white.withAlphaComponent(0.95), roughness: 0.05, isMetallic: false)]
 					)
 					let core = ModelEntity(
-						mesh: .generateSphere(radius: 0.010),
+						mesh: .generateSphere(radius: 0.005),
 						materials: [Self.pointMaterial(color: color)]
 					)
 					anchorEntity.addChild(ring)
@@ -649,14 +649,14 @@ struct ARMeasurementView: UIViewRepresentable {
 				
 				if isLocked {
 					let lineEntity = ModelEntity(
-						mesh: .generateCylinder(height: distance, radius: 0.0035),
+						mesh: .generateCylinder(height: distance, radius: 0.0010),
 						materials: [Self.lineMaterial(color: .white)]
 					)
 					anchorEntity.addChild(lineEntity)
 				} else {
-					let dashLength: Float = 0.028
-					let gapLength: Float = 0.016
-					let lineRadius: Float = 0.0026
+					let dashLength: Float = 0.010
+					let gapLength: Float = 0.006
+					let lineRadius: Float = 0.0010
 					let step = dashLength + gapLength
 					var offset = (-distance / 2) + (dashLength / 2)
 					
@@ -667,7 +667,7 @@ struct ARMeasurementView: UIViewRepresentable {
 						
 						let dashEntity = ModelEntity(
 							mesh: .generateCylinder(height: segmentLength, radius: lineRadius),
-							materials: [Self.lineMaterial(color: .systemYellow)]
+							materials: [Self.lineMaterial(color: .white)]
 						)
 						dashEntity.position.y = offset
 						anchorEntity.addChild(dashEntity)
