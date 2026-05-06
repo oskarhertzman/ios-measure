@@ -188,7 +188,7 @@ struct MeasurementExperienceView: View {
                     .disabled(!viewModel.canAddAdditionalPoint)
                 }
 
-                Button(action: viewModel.resetMeasurement) {
+                Button(action: handleUndoLastPoint) {
                     Image(systemName: "arrow.counterclockwise")
                         .font(.subheadline.weight(.semibold))
                         .frame(width: 52, height: 52)
@@ -196,6 +196,7 @@ struct MeasurementExperienceView: View {
                 .buttonStyle(.bordered)
                 .tint(.white)
                 .foregroundStyle(.white)
+                .disabled(!viewModel.canUndoLastPoint)
             }
         }
         .padding(18)
@@ -240,6 +241,11 @@ struct MeasurementExperienceView: View {
         viewModel.beginAdditionalPoint()
     }
 
+    private func handleUndoLastPoint() {
+        playLightHaptic()
+        viewModel.undoLastPoint()
+    }
+
     private func playLightHaptic() {
         impactGenerator.impactOccurred()
         impactGenerator.prepare()
@@ -266,19 +272,25 @@ private struct SavedMeasurementsSheet: View {
                     )
                 } else {
                     List(measurements) { measurement in
-                        HStack(alignment: .center, spacing: 12) {
-                            Image(systemName: "ruler")
-                                .font(.headline)
-                                .foregroundStyle(.black.opacity(0.8))
-                                .frame(width: 28, height: 28)
-                                .background(Color.black.opacity(0.06), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        Group {
+                            if measurement.identifiedShapeKind == .rectangle {
+                                RectangleMeasurementCard(measurement: measurement)
+                            } else {
+                                HStack(alignment: .center, spacing: 12) {
+                                    Image(systemName: "ruler")
+                                        .font(.headline)
+                                        .foregroundStyle(.black.opacity(0.8))
+                                        .frame(width: 28, height: 28)
+                                        .background(Color.black.opacity(0.06), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(measurement.name)
-                                    .font(.headline)
-                                Text(measurement.lengthText)
-                                    .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(measurement.name)
+                                            .font(.headline)
+                                        Text(measurement.lengthText)
+                                            .font(.subheadline)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
                             }
                         }
                         .listRowBackground(Color.white)
@@ -305,6 +317,75 @@ private struct SavedMeasurementsSheet: View {
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         .background(Color.white)
+    }
+}
+
+private struct RectangleMeasurementCard: View {
+    let measurement: SavedMeasurement
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(measurement.name)
+                .font(.headline)
+
+            HStack(spacing: 16) {
+                RectangleDiagram()
+                VStack(alignment: .leading, spacing: 10) {
+                    metricBlock(title: "Length", value: measurement.formattedLength(measurement.rectangleHeightMeters ?? 0))
+                    metricBlock(title: "Width", value: measurement.formattedLength(measurement.rectangleWidthMeters ?? 0))
+                    metricBlock(title: "Area", value: measurement.formattedArea(measurement.areaSquareMeters))
+                    metricBlock(title: "Diagonal", value: measurement.formattedLength(measurement.rectangleDiagonalMeters ?? 0))
+                }
+            }
+        }
+        .padding(.vertical, 6)
+    }
+
+    private func metricBlock(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.body.weight(.semibold))
+                .monospacedDigit()
+        }
+    }
+}
+
+private struct RectangleDiagram: View {
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .stroke(Color.black.opacity(0.14), lineWidth: 1)
+                .frame(width: 96, height: 96)
+
+            Path { path in
+                path.move(to: CGPoint(x: 18, y: 18))
+                path.addLine(to: CGPoint(x: 78, y: 18))
+                path.addLine(to: CGPoint(x: 78, y: 78))
+                path.addLine(to: CGPoint(x: 18, y: 78))
+                path.closeSubpath()
+                path.move(to: CGPoint(x: 48, y: 18))
+                path.addLine(to: CGPoint(x: 48, y: 78))
+                path.move(to: CGPoint(x: 18, y: 48))
+                path.addLine(to: CGPoint(x: 78, y: 48))
+            }
+            .stroke(.black.opacity(0.65), lineWidth: 1.5)
+
+            ForEach(Array([
+                CGPoint(x: 18, y: 18),
+                CGPoint(x: 78, y: 18),
+                CGPoint(x: 78, y: 78),
+                CGPoint(x: 18, y: 78)
+            ].enumerated()), id: \.offset) { _, point in
+                Circle()
+                    .fill(.black.opacity(0.78))
+                    .frame(width: 6, height: 6)
+                    .position(point)
+            }
+        }
+        .frame(width: 96, height: 96)
     }
 }
 

@@ -18,6 +18,7 @@ struct ARMeasurementView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: ARView, context: Context) {
+        context.coordinator.setSceneUpdatesSuspended(viewModel.isSceneUpdatesSuspended)
         context.coordinator.syncSceneContent()
     }
 
@@ -78,6 +79,10 @@ final class ARMeasurementCoordinator: NSObject {
     func stop() {
         displayLink?.invalidate()
         displayLink = nil
+    }
+
+    func setSceneUpdatesSuspended(_ isSuspended: Bool) {
+        displayLink?.isPaused = isSuspended
     }
 
     func syncSceneContent() {

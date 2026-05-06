@@ -49,6 +49,23 @@ struct SavedMeasurement: Identifiable, Equatable {
         }
     }
 
+    var rectangleWidthMeters: Float? {
+        guard identifiedShapeKind == .rectangle, points.count == 4 else { return nil }
+        return (simd_distance(points[0], points[1]) + simd_distance(points[2], points[3])) * 0.5
+    }
+
+    var rectangleHeightMeters: Float? {
+        guard identifiedShapeKind == .rectangle, points.count == 4 else { return nil }
+        return (simd_distance(points[1], points[2]) + simd_distance(points[3], points[0])) * 0.5
+    }
+
+    var rectangleDiagonalMeters: Float? {
+        guard identifiedShapeKind == .rectangle, points.count == 4 else { return nil }
+        let firstDiagonal = simd_distance(points[0], points[2])
+        let secondDiagonal = simd_distance(points[1], points[3])
+        return (firstDiagonal + secondDiagonal) * 0.5
+    }
+
     var areaSquareMeters: Float {
         guard let identifiedShapeKind else { return 0 }
 
@@ -58,6 +75,20 @@ struct SavedMeasurement: Identifiable, Equatable {
         case .rectangle:
             return rectangleArea(points: points)
         }
+    }
+
+    func formattedLength(_ meters: Float) -> String {
+        if meters >= 1 {
+            return String(format: "%.2f m", meters)
+        }
+        return String(format: "%.1f cm", meters * 100)
+    }
+
+    func formattedArea(_ squareMeters: Float) -> String {
+        if squareMeters >= 0.1 {
+            return String(format: "%.2f m²", squareMeters)
+        }
+        return String(format: "%.1f cm²", squareMeters * 10_000)
     }
 
     private func polygonArea(points: [SIMD3<Float>]) -> Float {

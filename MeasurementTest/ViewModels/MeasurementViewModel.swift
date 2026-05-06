@@ -48,6 +48,10 @@ final class MeasurementViewModel: ObservableObject {
         isLidarAvailable && livePoint != nil && confidenceLevel != .low && !hasCompletedMeasurement
     }
 
+    var canUndoLastPoint: Bool {
+        !fixedPoints.isEmpty
+    }
+
     var confidenceText: String {
         switch confidenceLevel {
         case .unknown: return ""
@@ -76,19 +80,7 @@ final class MeasurementViewModel: ObservableObject {
 
         livePoint = point
         confidenceLevel = confidence
-
-        if fixedPoints.isEmpty {
-            instructionText = point == nil
-                ? "Point at a surface until the reticle locks on."
-                : "Tap to place the first point."
-        } else if shouldShowLiveSegment {
-            instructionText = point == nil
-                ? "Move slowly until the next point locks."
-                : "Tap to place the next point."
-        } else {
-            instructionText = "Measurement complete. Add a point or start a new measure."
-        }
-
+        updateInstructionText()
         refreshDistance()
         return true
     }
@@ -131,9 +123,19 @@ final class MeasurementViewModel: ObservableObject {
         guard fixedPoints.count >= 2 else { return }
         guard identifiedShapeKind == nil else { return }
         isAwaitingAdditionalPoint = true
-        instructionText = livePoint == nil
-            ? "Move slowly until the next point locks."
-            : "Tap to place the next point."
+        updateInstructionText()
+        refreshDistance()
+    }
+
+    func undoLastPoint() {
+        guard !fixedPoints.isEmpty else { return }
+
+        identifiedShapeKind = nil
+        fixedPoints.removeLast()
+        livePoint = nil
+        confidenceLevel = .unknown
+        isAwaitingAdditionalPoint = !fixedPoints.isEmpty
+        updateInstructionText()
         refreshDistance()
     }
 
@@ -210,6 +212,22 @@ final class MeasurementViewModel: ObservableObject {
         }
         let squareCentimeters = squareMeters * 10_000
         return String(format: "%.1f cm²", squareCentimeters)
+    }
+
+    private func updateInstructionText() {
+        if fixedPoints.isEmpty {
+            instructionText = livePoint == nil
+                ? "Point at a surface until the reticle locks on."
+                : "Tap to place the first point."
+        } else if shouldShowLiveSegment {
+            instructionText = livePoint == nil
+                ? "Move slowly until the next point locks."
+                : "Tap to place the next point."
+        } else if identifiedShapeKind != nil {
+            instructionText = "\(identifiedShapeKind?.title ?? "Shape") detected. Save it to continue."
+        } else {
+            instructionText = "Measurement complete. Save it or add another point."
+        }
     }
 
     private func area(for points: [SIMD3<Float>], shapeKind: IdentifiedShapeKind) -> Float {

@@ -19,6 +19,15 @@ extension ARMeasurementCoordinator {
         let container = Entity()
         container.addChild(model)
         container.components.set(BillboardComponent())
+        container.components.set(
+            DistanceScaledVisualComponent(
+                referenceDistance: 0.7,
+                minScale: 0.55,
+                maxScale: 1.8,
+                baseScale: SIMD3<Float>(repeating: 1),
+                scaleAxes: SIMD3<Float>(repeating: 1)
+            )
+        )
         return container
     }
 
@@ -31,6 +40,15 @@ extension ARMeasurementCoordinator {
         let container = Entity()
         container.addChild(model)
         container.components.set(BillboardComponent())
+        container.components.set(
+            DistanceScaledVisualComponent(
+                referenceDistance: 0.8,
+                minScale: 0.75,
+                maxScale: 2.0,
+                baseScale: SIMD3<Float>(repeating: 1),
+                scaleAxes: SIMD3<Float>(repeating: 1)
+            )
+        )
         return container
     }
 
@@ -54,12 +72,31 @@ extension ARMeasurementCoordinator {
         let container = Entity()
         container.addChild(model)
         container.components.set(BillboardComponent())
+        container.components.set(
+            DistanceScaledVisualComponent(
+                referenceDistance: 0.8,
+                minScale: 0.8,
+                maxScale: 2.2,
+                baseScale: SIMD3<Float>(repeating: 1),
+                scaleAxes: SIMD3<Float>(repeating: 1)
+            )
+        )
         return container
     }
 
     static func makeLineEntity(length: Float) -> ModelEntity {
         let mesh = cachedLineMesh(length: length)
-        return ModelEntity(mesh: mesh, materials: [whiteDotMaterial])
+        let model = ModelEntity(mesh: mesh, materials: [whiteDotMaterial])
+        model.components.set(
+            DistanceScaledVisualComponent(
+                referenceDistance: 0.8,
+                minScale: 0.8,
+                maxScale: 2.4,
+                baseScale: SIMD3<Float>(repeating: 1),
+                scaleAxes: SIMD3<Float>(1, 0, 1)
+            )
+        )
+        return model
     }
 
     static func makeFilledShapeEntity(points: [SIMD3<Float>]) -> ModelEntity? {

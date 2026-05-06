@@ -163,11 +163,14 @@ extension ARMeasurementCoordinator {
         }
 
         let direction = simd_normalize(delta)
-        let targetDotCount = min(max(Int(distance / 0.012), 12), 72)
-        let dotSpacing = distance / Float(max(targetDotCount, 1))
-        ensureLiveDotPool(count: targetDotCount + 1, in: anchorEntity)
+        let midpoint = start + (delta * 0.5)
+        let targetDotSpacing = dotSpacing(for: midpoint)
+        let segmentCount = min(max(Int((distance / targetDotSpacing).rounded()), 1), 48)
+        let dotSpacing = distance / Float(segmentCount)
+        let dotCount = segmentCount + 1
+        ensureLiveDotPool(count: dotCount, in: anchorEntity)
 
-        for index in 0...targetDotCount {
+        for index in 0..<dotCount {
             let offset = Float(index) * dotSpacing
             let position = start + (direction * offset)
             let dot = liveDotPool[index]
@@ -175,15 +178,15 @@ extension ARMeasurementCoordinator {
             dot.isEnabled = true
         }
 
-        if liveDotPool.count > targetDotCount + 1 {
-            for index in (targetDotCount + 1)..<liveDotPool.count {
+        if liveDotPool.count > dotCount {
+            for index in dotCount..<liveDotPool.count {
                 liveDotPool[index].isEnabled = false
             }
         }
     }
 
     func clearChildren(from entity: Entity) {
-        for child in entity.children {
+        for child in Array(entity.children) {
             clearChildren(from: child)
             child.removeFromParent()
         }
@@ -219,6 +222,21 @@ extension ARMeasurementCoordinator {
         default:
             return 2
         }
+    }
+
+    func dotSpacing(for point: SIMD3<Float>) -> Float {
+        guard let cameraPosition = currentCameraPosition() else { return 0.015 }
+        let distanceToCamera = simd_distance(point, cameraPosition)
+        return min(max(distanceToCamera * 0.018, 0.010), 0.035)
+    }
+
+    func currentCameraPosition() -> SIMD3<Float>? {
+        guard let cameraTransform = arView?.session.currentFrame?.camera.transform else { return nil }
+        return SIMD3<Float>(
+            cameraTransform.columns.3.x,
+            cameraTransform.columns.3.y,
+            cameraTransform.columns.3.z
+        )
     }
 
     func lockedMeasurementSignature(fixedPoints: [SIMD3<Float>], identifiedShapeKind: IdentifiedShapeKind?) -> String {
@@ -283,6 +301,22 @@ extension ARMeasurementCoordinator {
                 from: entity.position(relativeTo: nil),
                 relativeTo: nil
             )
+        }
+
+        let scalingQuery = EntityQuery(where: .has(DistanceScaledVisualComponent.self))
+        arView.scene.performQuery(scalingQuery).forEach { entity in
+            guard let component = entity.components[DistanceScaledVisualComponent.self] else { return }
+            let distanceToCamera = simd_distance(entity.position(relativeTo: nil), cameraPosition)
+            let factor = min(
+                max(distanceToCamera / component.referenceDistance, component.minScale),
+                component.maxScale
+            )
+            let scaleFactor = SIMD3<Float>(
+                x: (1 - component.scaleAxes.x) + component.scaleAxes.x * factor,
+                y: (1 - component.scaleAxes.y) + component.scaleAxes.y * factor,
+                z: (1 - component.scaleAxes.z) + component.scaleAxes.z * factor
+            )
+            entity.scale = component.baseScale * scaleFactor
         }
     }
 }
