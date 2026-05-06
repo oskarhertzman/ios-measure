@@ -170,6 +170,12 @@ final class MeasurementViewModel: ObservableObject {
             return
         }
 
+        if identifiedShapeKind != nil, fixedPoints.count >= 3 {
+            let area = polygonArea(points: fixedPoints)
+            distanceText = area > 0 ? Self.formatArea(area) : "--"
+            return
+        }
+
         var meters: Float = 0
 
         if fixedPoints.count >= 2 {
@@ -195,7 +201,45 @@ final class MeasurementViewModel: ObservableObject {
     }
 
     var defaultMeasurementName: String {
-        "Measurement \(savedMeasurements.count + 1)"
+        identifiedShapeKind?.title ?? "Measurement \(savedMeasurements.count + 1)"
+    }
+
+    private static func formatArea(_ squareMeters: Float) -> String {
+        let squareCentimeters = squareMeters * 10_000
+        return String(format: "%.1f cm²", squareCentimeters)
+    }
+
+    private func polygonArea(points: [SIMD3<Float>]) -> Float {
+        guard points.count >= 3 else { return 0 }
+
+        let normal = polygonNormal(points: points)
+        guard simd_length(normal) > 0.0001 else { return 0 }
+
+        let projectedPoints = projected2DPoints(for: points, normal: simd_normalize(normal))
+        guard projectedPoints.count >= 3 else { return 0 }
+
+        var twiceArea: Float = 0
+        for index in 0..<projectedPoints.count {
+            let current = projectedPoints[index]
+            let next = projectedPoints[(index + 1) % projectedPoints.count]
+            twiceArea += (current.x * next.y) - (next.x * current.y)
+        }
+
+        return abs(twiceArea) * 0.5
+    }
+
+    private func polygonNormal(points: [SIMD3<Float>]) -> SIMD3<Float> {
+        guard points.count >= 3 else { return .zero }
+
+        var normal = SIMD3<Float>.zero
+        for index in 0..<points.count {
+            let current = points[index]
+            let next = points[(index + 1) % points.count]
+            normal.x += (current.y - next.y) * (current.z + next.z)
+            normal.y += (current.z - next.z) * (current.x + next.x)
+            normal.z += (current.x - next.x) * (current.y + next.y)
+        }
+        return normal
     }
 
     private func identifyClosedShapeIfNeeded(with point: SIMD3<Float>) -> IdentifiedShapeKind? {
