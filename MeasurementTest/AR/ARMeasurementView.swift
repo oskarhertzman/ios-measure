@@ -47,6 +47,8 @@ final class ARMeasurementCoordinator: NSObject {
     var lastRenderedSignature = ""
     var snapFeedbackGenerator = UIImpactFeedbackGenerator(style: .light)
     var currentSnapTarget: SIMD3<Float>?
+    var currentRectangleSnapTarget: SIMD3<Float>?
+    var isRightAngleSnapActive = false
 
     init(viewModel: MeasurementViewModel) {
         self.viewModel = viewModel
