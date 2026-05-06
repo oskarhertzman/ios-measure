@@ -110,6 +110,16 @@ struct MeasurementExperienceView: View {
                         .foregroundStyle(.white.opacity(0.7))
                 }
             }
+
+            if let identifiedShapeKind = viewModel.identifiedShapeKind {
+                Text(identifiedShapeKind.title)
+                    .font(.caption.weight(.semibold))
+                    .textCase(.uppercase)
+                    .foregroundStyle(.black)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Color.white.opacity(0.9), in: Capsule())
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(18)

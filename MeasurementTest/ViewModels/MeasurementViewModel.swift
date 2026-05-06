@@ -8,6 +8,7 @@ final class MeasurementViewModel: ObservableObject {
     @Published private(set) var fixedPoints: [SIMD3<Float>] = []
     @Published private(set) var livePoint: SIMD3<Float>?
     @Published private(set) var savedMeasurements: [SavedMeasurement] = []
+    @Published private(set) var identifiedShapeKind: IdentifiedShapeKind?
     @Published private(set) var distanceText = "--"
     @Published private(set) var instructionText = "Move the device slowly to scan surfaces, then align the reticle."
     @Published private(set) var confidenceLevel: SurfaceConfidence = .unknown
@@ -36,7 +37,7 @@ final class MeasurementViewModel: ObservableObject {
     }
 
     var canAddAdditionalPoint: Bool {
-        hasCompletedMeasurement && livePoint != nil && confidenceLevel != .low
+        hasCompletedMeasurement && identifiedShapeKind == nil && livePoint != nil && confidenceLevel != .low
     }
 
     var canSaveMeasurement: Bool {
@@ -112,9 +113,15 @@ final class MeasurementViewModel: ObservableObject {
             fixedPoints = [livePoint]
             instructionText = "First point placed. Move to the second point."
         } else {
-            fixedPoints.append(livePoint)
-            isAwaitingAdditionalPoint = false
-            instructionText = "Measurement complete. Save it or add another point."
+            if let identifiedShapeKind = identifyClosedShapeIfNeeded(with: livePoint) {
+                self.identifiedShapeKind = identifiedShapeKind
+                isAwaitingAdditionalPoint = false
+                instructionText = "\(identifiedShapeKind.title) detected. Save it to continue."
+            } else {
+                fixedPoints.append(livePoint)
+                isAwaitingAdditionalPoint = false
+                instructionText = "Measurement complete. Save it or add another point."
+            }
         }
 
         refreshDistance()
@@ -122,6 +129,7 @@ final class MeasurementViewModel: ObservableObject {
 
     func beginAdditionalPoint() {
         guard fixedPoints.count >= 2 else { return }
+        guard identifiedShapeKind == nil else { return }
         isAwaitingAdditionalPoint = true
         instructionText = livePoint == nil
             ? "Move slowly until the next point locks."
@@ -144,6 +152,7 @@ final class MeasurementViewModel: ObservableObject {
     func resetMeasurement() {
         fixedPoints = []
         livePoint = nil
+        identifiedShapeKind = nil
         distanceText = "--"
         confidenceLevel = .unknown
         isAwaitingAdditionalPoint = false
@@ -187,6 +196,101 @@ final class MeasurementViewModel: ObservableObject {
 
     var defaultMeasurementName: String {
         "Measurement \(savedMeasurements.count + 1)"
+    }
+
+    private func identifyClosedShapeIfNeeded(with point: SIMD3<Float>) -> IdentifiedShapeKind? {
+        guard let firstPoint = fixedPoints.first else { return nil }
+        guard simd_distance(point, firstPoint) <= 0.001 else { return nil }
+
+        switch fixedPoints.count {
+        case 3:
+            return .triangle
+        case 4:
+            return isValidRectangle(points: fixedPoints) ? .rectangle : nil
+        default:
+            return nil
+        }
+    }
+
+    private func isValidRectangle(points: [SIMD3<Float>]) -> Bool {
+        guard points.count == 4 else { return false }
+
+        let edge0 = points[1] - points[0]
+        let edge1 = points[2] - points[1]
+        let edge2 = points[3] - points[2]
+        let edge3 = points[0] - points[3]
+
+        let edges = [edge0, edge1, edge2, edge3]
+        guard edges.allSatisfy({ simd_length($0) > 0.001 }) else { return false }
+
+        let normal = simd_cross(edge0, edge1)
+        guard simd_length(normal) > 0.0001 else { return false }
+        let normalizedNormal = simd_normalize(normal)
+
+        let planarTolerance: Float = 0.01
+        for point in points.dropFirst(2) {
+            let distanceFromPlane = abs(simd_dot(point - points[0], normalizedNormal))
+            if distanceFromPlane > planarTolerance {
+                return false
+            }
+        }
+
+        let rightAngleTolerance: Float = 0.25
+        for index in 0..<4 {
+            let first = simd_normalize(edges[index])
+            let second = simd_normalize(edges[(index + 1) % 4])
+            if abs(simd_dot(first, second)) > rightAngleTolerance {
+                return false
+            }
+        }
+
+        let parallelTolerance: Float = 0.9
+        if abs(simd_dot(simd_normalize(edge0), simd_normalize(edge2))) < parallelTolerance {
+            return false
+        }
+        if abs(simd_dot(simd_normalize(edge1), simd_normalize(edge3))) < parallelTolerance {
+            return false
+        }
+
+        let oppositeLengthTolerance: Float = 0.2
+        let horizontalLengthRatio = abs(simd_length(edge0) - simd_length(edge2)) / max(simd_length(edge0), simd_length(edge2))
+        let verticalLengthRatio = abs(simd_length(edge1) - simd_length(edge3)) / max(simd_length(edge1), simd_length(edge3))
+        guard horizontalLengthRatio < oppositeLengthTolerance,
+              verticalLengthRatio < oppositeLengthTolerance else {
+            return false
+        }
+
+        let projected = projected2DPoints(for: points, normal: normalizedNormal)
+        return !segmentsIntersect(projected[0], projected[1], projected[2], projected[3]) &&
+            !segmentsIntersect(projected[1], projected[2], projected[3], projected[0])
+    }
+
+    private func projected2DPoints(for points: [SIMD3<Float>], normal: SIMD3<Float>) -> [SIMD2<Float>] {
+        let reference = abs(normal.y) < 0.9 ? SIMD3<Float>(0, 1, 0) : SIMD3<Float>(1, 0, 0)
+        let tangent = simd_normalize(simd_cross(reference, normal))
+        let bitangent = simd_normalize(simd_cross(normal, tangent))
+        let origin = points[0]
+
+        return points.map { point in
+            let offset = point - origin
+            return SIMD2<Float>(simd_dot(offset, tangent), simd_dot(offset, bitangent))
+        }
+    }
+
+    private func segmentsIntersect(_ a1: SIMD2<Float>, _ a2: SIMD2<Float>, _ b1: SIMD2<Float>, _ b2: SIMD2<Float>) -> Bool {
+        func cross(_ lhs: SIMD2<Float>, _ rhs: SIMD2<Float>) -> Float {
+            lhs.x * rhs.y - lhs.y * rhs.x
+        }
+
+        let r = a2 - a1
+        let s = b2 - b1
+        let denominator = cross(r, s)
+        guard abs(denominator) > 0.0001 else { return false }
+
+        let diff = b1 - a1
+        let t = cross(diff, s) / denominator
+        let u = cross(diff, r) / denominator
+        return t > 0 && t < 1 && u > 0 && u < 1
     }
 }
 #endif

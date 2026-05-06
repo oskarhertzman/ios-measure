@@ -49,7 +49,11 @@ extension ARMeasurementCoordinator {
         anchorEntity.children.removeAll()
 
         if viewModel.fixedPoints.count >= 2 {
-            populateLockedMeasurement(into: anchorEntity, points: viewModel.fixedPoints)
+            if let identifiedShapeKind = viewModel.identifiedShapeKind {
+                populateIdentifiedShape(into: anchorEntity, points: viewModel.fixedPoints, kind: identifiedShapeKind)
+            } else {
+                populateLockedMeasurement(into: anchorEntity, points: viewModel.fixedPoints)
+            }
         }
 
         if viewModel.shouldShowLiveSegment,
@@ -87,6 +91,15 @@ extension ARMeasurementCoordinator {
         let endDot = Self.makeDotEntity(radius: 0.0035)
         endDot.position = points[points.count - 1]
         anchorEntity.addChild(endDot)
+    }
+
+    func populateIdentifiedShape(into anchorEntity: AnchorEntity, points: [SIMD3<Float>], kind: IdentifiedShapeKind) {
+        if let fillEntity = Self.makeFilledShapeEntity(points: points) {
+            anchorEntity.addChild(fillEntity)
+        }
+
+        populateLockedMeasurement(into: anchorEntity, points: points)
+        populateLockedSegment(into: anchorEntity, start: points[points.count - 1], end: points[0])
     }
 
     func populateLockedSegment(into anchorEntity: AnchorEntity, start: SIMD3<Float>, end: SIMD3<Float>) {

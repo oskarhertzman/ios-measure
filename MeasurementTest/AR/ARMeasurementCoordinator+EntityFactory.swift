@@ -6,6 +6,7 @@ extension ARMeasurementCoordinator {
     private static let whiteDotMaterial = UnlitMaterial(color: .white)
     private static let tickMaterial = UnlitMaterial(color: .white.withAlphaComponent(0.9))
     private static let textMaterial = UnlitMaterial(color: .white)
+    private static let fillMaterial = SimpleMaterial(color: .white.withAlphaComponent(0.18), isMetallic: false)
     private static var dotMeshCache: [Float: MeshResource] = [:]
     private static var tickMeshCache: [Float: MeshResource] = [:]
     private static var lineMeshCache: [Int: MeshResource] = [:]
@@ -61,6 +62,11 @@ extension ARMeasurementCoordinator {
         return ModelEntity(mesh: mesh, materials: [whiteDotMaterial])
     }
 
+    static func makeFilledShapeEntity(points: [SIMD3<Float>]) -> ModelEntity? {
+        guard let mesh = filledShapeMesh(points: points) else { return nil }
+        return ModelEntity(mesh: mesh, materials: [fillMaterial])
+    }
+
     private static func cachedDotMesh(radius: Float) -> MeshResource {
         if let mesh = dotMeshCache[radius] {
             return mesh
@@ -90,6 +96,21 @@ extension ARMeasurementCoordinator {
         let mesh = MeshResource.generateCylinder(height: Float(quantizedLength) / 1_000, radius: 0.0008)
         lineMeshCache[quantizedLength] = mesh
         return mesh
+    }
+
+    private static func filledShapeMesh(points: [SIMD3<Float>]) -> MeshResource? {
+        guard points.count == 3 || points.count == 4 else { return nil }
+
+        var descriptor = MeshDescriptor(name: "identified-shape")
+        descriptor.positions = MeshBuffers.Positions(points)
+
+        if points.count == 3 {
+            descriptor.primitives = .triangles([0, 1, 2])
+        } else {
+            descriptor.primitives = .triangles([0, 1, 2, 0, 2, 3])
+        }
+
+        return try? MeshResource.generate(from: [descriptor])
     }
 }
 #endif
