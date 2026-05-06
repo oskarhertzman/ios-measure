@@ -38,6 +38,7 @@ struct MeasurementExperienceView: View {
         .sheet(isPresented: $isSavedMeasurementsPresented) {
             SavedMeasurementsSheet(
                 measurements: viewModel.savedMeasurements,
+                onDeleteMeasurement: viewModel.deleteSavedMeasurement,
                 onClearAll: viewModel.clearSavedMeasurements
             )
         }
@@ -258,6 +259,7 @@ struct MeasurementExperienceView: View {
 
 private struct SavedMeasurementsSheet: View {
     let measurements: [SavedMeasurement]
+    let onDeleteMeasurement: (UUID) -> Void
     let onClearAll: () -> Void
     @Environment(\.dismiss) private var dismiss
 
@@ -274,7 +276,10 @@ private struct SavedMeasurementsSheet: View {
                     List(measurements) { measurement in
                         Group {
                             if measurement.identifiedShapeKind == .rectangle {
-                                RectangleMeasurementCard(measurement: measurement)
+                                RectangleMeasurementCard(
+                                    measurement: measurement,
+                                    onDelete: { onDeleteMeasurement(measurement.id) }
+                                )
                             } else {
                                 HStack(alignment: .center, spacing: 12) {
                                     Image(systemName: "ruler")
@@ -290,6 +295,18 @@ private struct SavedMeasurementsSheet: View {
                                             .font(.subheadline)
                                             .foregroundStyle(.secondary)
                                     }
+
+                                    Spacer()
+
+                                    Button(role: .destructive) {
+                                        onDeleteMeasurement(measurement.id)
+                                    } label: {
+                                        Image(systemName: "trash")
+                                            .font(.subheadline.weight(.semibold))
+                                            .foregroundStyle(.red)
+                                            .frame(width: 30, height: 30)
+                                    }
+                                    .buttonStyle(.plain)
                                 }
                             }
                         }
@@ -322,19 +339,36 @@ private struct SavedMeasurementsSheet: View {
 
 private struct RectangleMeasurementCard: View {
     let measurement: SavedMeasurement
+    let onDelete: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(measurement.name)
-                .font(.headline)
+            HStack(alignment: .top, spacing: 12) {
+                Text(measurement.name)
+                    .font(.headline)
+
+                Spacer()
+
+                Button(role: .destructive, action: onDelete) {
+                    Image(systemName: "trash")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.red)
+                        .frame(width: 30, height: 30)
+                }
+                .buttonStyle(.plain)
+            }
 
             HStack(spacing: 16) {
                 RectangleDiagram()
-                VStack(alignment: .leading, spacing: 10) {
-                    metricBlock(title: "Length", value: measurement.formattedLength(measurement.rectangleHeightMeters ?? 0))
-                    metricBlock(title: "Width", value: measurement.formattedLength(measurement.rectangleWidthMeters ?? 0))
-                    metricBlock(title: "Area", value: measurement.formattedArea(measurement.areaSquareMeters))
-                    metricBlock(title: "Diagonal", value: measurement.formattedLength(measurement.rectangleDiagonalMeters ?? 0))
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(alignment: .top, spacing: 18) {
+                        metricBlock(title: "Length", value: measurement.formattedLength(measurement.rectangleHeightMeters ?? 0))
+                        metricBlock(title: "Width", value: measurement.formattedLength(measurement.rectangleWidthMeters ?? 0))
+                    }
+                    HStack(alignment: .top, spacing: 18) {
+                        metricBlock(title: "Area", value: measurement.formattedArea(measurement.areaSquareMeters))
+                        metricBlock(title: "Diagonal", value: measurement.formattedLength(measurement.rectangleDiagonalMeters ?? 0))
+                    }
                 }
             }
         }
@@ -350,6 +384,7 @@ private struct RectangleMeasurementCard: View {
                 .font(.body.weight(.semibold))
                 .monospacedDigit()
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

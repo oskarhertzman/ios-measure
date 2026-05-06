@@ -41,6 +41,7 @@ extension ARMeasurementCoordinator: ARSessionDelegate {
             configuration.frameSemantics.insert(.smoothedSceneDepth)
         }
 
+        currentSessionConfiguration = configuration
         arView.session.run(configuration, options: [.resetTracking, .removeExistingAnchors])
 
         arView.environment.sceneUnderstanding.options = [.occlusion, .physics, .collision]

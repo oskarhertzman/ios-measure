@@ -151,6 +151,10 @@ final class MeasurementViewModel: ObservableObject {
         savedMeasurements.removeAll()
     }
 
+    func deleteSavedMeasurement(id: UUID) {
+        savedMeasurements.removeAll { $0.id == id }
+    }
+
     func resetMeasurement() {
         fixedPoints = []
         livePoint = nil

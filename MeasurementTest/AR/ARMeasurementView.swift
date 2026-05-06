@@ -54,6 +54,8 @@ final class ARMeasurementCoordinator: NSObject {
     var currentSnapTarget: SIMD3<Float>?
     var currentRectangleSnapTarget: SIMD3<Float>?
     var isRightAngleSnapActive = false
+    var currentSessionConfiguration: ARWorldTrackingConfiguration?
+    var isSessionPaused = false
 
     init(viewModel: MeasurementViewModel) {
         self.viewModel = viewModel
@@ -82,7 +84,17 @@ final class ARMeasurementCoordinator: NSObject {
     }
 
     func setSceneUpdatesSuspended(_ isSuspended: Bool) {
+        guard let arView else { return }
+        guard isSessionPaused != isSuspended else { return }
+
+        isSessionPaused = isSuspended
         displayLink?.isPaused = isSuspended
+
+        if isSuspended {
+            arView.session.pause()
+        } else if let currentSessionConfiguration {
+            arView.session.run(currentSessionConfiguration, options: [])
+        }
     }
 
     func syncSceneContent() {
