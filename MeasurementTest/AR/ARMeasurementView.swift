@@ -38,13 +38,17 @@ final class ARMeasurementCoordinator: NSObject {
     var startAnchor: AnchorEntity?
     var endAnchor: AnchorEntity?
     var lineAnchor: AnchorEntity?
+    var lockedContentEntity = Entity()
+    var liveContentEntity = Entity()
+    var liveDotPool: [Entity] = []
 
     var recentHits: [SIMD3<Float>] = []
     let maxRecentHits = 5
 
     var frameCounter = 0
     static var textCache: [String: MeshResource] = [:]
-    var lastRenderedSignature = ""
+    var lastLockedSignature = ""
+    var lastLiveSignature = ""
     var snapFeedbackGenerator = UIImpactFeedbackGenerator(style: .light)
     var currentSnapTarget: SIMD3<Float>?
     var currentRectangleSnapTarget: SIMD3<Float>?

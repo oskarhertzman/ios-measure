@@ -170,8 +170,8 @@ final class MeasurementViewModel: ObservableObject {
             return
         }
 
-        if identifiedShapeKind != nil, fixedPoints.count >= 3 {
-            let area = polygonArea(points: fixedPoints)
+        if let identifiedShapeKind, fixedPoints.count >= 3 {
+            let area = area(for: fixedPoints, shapeKind: identifiedShapeKind)
             distanceText = area > 0 ? Self.formatArea(area) : "--"
             return
         }
@@ -205,8 +205,20 @@ final class MeasurementViewModel: ObservableObject {
     }
 
     private static func formatArea(_ squareMeters: Float) -> String {
+        if squareMeters >= 0.1 {
+            return String(format: "%.2f m²", squareMeters)
+        }
         let squareCentimeters = squareMeters * 10_000
         return String(format: "%.1f cm²", squareCentimeters)
+    }
+
+    private func area(for points: [SIMD3<Float>], shapeKind: IdentifiedShapeKind) -> Float {
+        switch shapeKind {
+        case .triangle:
+            return polygonArea(points: points)
+        case .rectangle:
+            return rectangleArea(points: points)
+        }
     }
 
     private func polygonArea(points: [SIMD3<Float>]) -> Float {
@@ -226,6 +238,14 @@ final class MeasurementViewModel: ObservableObject {
         }
 
         return abs(twiceArea) * 0.5
+    }
+
+    private func rectangleArea(points: [SIMD3<Float>]) -> Float {
+        guard points.count == 4 else { return 0 }
+
+        let width = (simd_distance(points[0], points[1]) + simd_distance(points[2], points[3])) * 0.5
+        let height = (simd_distance(points[1], points[2]) + simd_distance(points[3], points[0])) * 0.5
+        return width * height
     }
 
     private func polygonNormal(points: [SIMD3<Float>]) -> SIMD3<Float> {

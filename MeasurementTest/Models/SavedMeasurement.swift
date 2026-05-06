@@ -24,9 +24,12 @@ struct SavedMeasurement: Identifiable, Equatable {
     }
 
     var lengthText: String {
-        if let identifiedShapeKind = identifiedShapeKind {
+        if identifiedShapeKind != nil {
+            if areaSquareMeters >= 0.1 {
+                return String(format: "%.2f m²", areaSquareMeters)
+            }
             let squareCentimeters = areaSquareMeters * 10_000
-            return String(format: "%.1f cm² %@", squareCentimeters)
+            return String(format: "%.1f cm²", squareCentimeters)
         }
 
         if lengthMeters >= 1 {
@@ -47,8 +50,17 @@ struct SavedMeasurement: Identifiable, Equatable {
     }
 
     var areaSquareMeters: Float {
-        guard identifiedShapeKind != nil else { return 0 }
+        guard let identifiedShapeKind else { return 0 }
 
+        switch identifiedShapeKind {
+        case .triangle:
+            return polygonArea(points: points)
+        case .rectangle:
+            return rectangleArea(points: points)
+        }
+    }
+
+    private func polygonArea(points: [SIMD3<Float>]) -> Float {
         let normal = polygonNormal(points: points)
         guard simd_length(normal) > 0.0001 else { return 0 }
 
@@ -63,6 +75,14 @@ struct SavedMeasurement: Identifiable, Equatable {
         }
 
         return abs(twiceArea) * 0.5
+    }
+
+    private func rectangleArea(points: [SIMD3<Float>]) -> Float {
+        guard points.count == 4 else { return 0 }
+
+        let width = (simd_distance(points[0], points[1]) + simd_distance(points[2], points[3])) * 0.5
+        let height = (simd_distance(points[1], points[2]) + simd_distance(points[3], points[0])) * 0.5
+        return width * height
     }
 
     private func isValidRectangle(points: [SIMD3<Float>]) -> Bool {

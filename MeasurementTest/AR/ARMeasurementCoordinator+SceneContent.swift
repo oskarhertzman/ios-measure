@@ -5,7 +5,8 @@ import UIKit
 
 extension ARMeasurementCoordinator {
     func invalidateRenderedSceneState() {
-        lastRenderedSignature = ""
+        lastLockedSignature = ""
+        lastLiveSignature = ""
     }
 
     func updatePointAnchor(_ anchor: inout AnchorEntity?, point: SIMD3<Float>?, in arView: ARView) {
@@ -32,39 +33,52 @@ extension ARMeasurementCoordinator {
         guard !viewModel.fixedPoints.isEmpty else {
             lineAnchor?.removeFromParent()
             lineAnchor = nil
+            lockedContentEntity = Entity()
+            liveContentEntity = Entity()
+            liveDotPool.removeAll()
             invalidateRenderedSceneState()
             return
         }
 
-        let signature = measurementSignature(
-            fixedPoints: viewModel.fixedPoints,
-            livePoint: viewModel.shouldShowLiveSegment ? viewModel.livePoint : nil
-        )
-        if lastRenderedSignature == signature {
-            return
+        let anchorEntity = lineAnchor ?? AnchorEntity(world: .zero)
+        if lineAnchor == nil {
+            anchorEntity.addChild(lockedContentEntity)
+            anchorEntity.addChild(liveContentEntity)
+            arView.scene.addAnchor(anchorEntity)
+            lineAnchor = anchorEntity
         }
 
-        lastRenderedSignature = signature
-        let anchorEntity = lineAnchor ?? AnchorEntity(world: .zero)
-        anchorEntity.children.removeAll()
+        let lockedSignature = lockedMeasurementSignature(
+            fixedPoints: viewModel.fixedPoints,
+            identifiedShapeKind: viewModel.identifiedShapeKind
+        )
+        if lastLockedSignature != lockedSignature {
+            lastLockedSignature = lockedSignature
+            clearChildren(from: lockedContentEntity)
 
-        if viewModel.fixedPoints.count >= 2 {
-            if let identifiedShapeKind = viewModel.identifiedShapeKind {
-                populateIdentifiedShape(into: anchorEntity, points: viewModel.fixedPoints, kind: identifiedShapeKind)
-            } else {
-                populateLockedMeasurement(into: anchorEntity, points: viewModel.fixedPoints)
+            if viewModel.fixedPoints.count >= 2 {
+                if let identifiedShapeKind = viewModel.identifiedShapeKind {
+                    populateIdentifiedShape(into: lockedContentEntity, points: viewModel.fixedPoints, kind: identifiedShapeKind)
+                } else {
+                    populateLockedMeasurement(into: lockedContentEntity, points: viewModel.fixedPoints)
+                }
             }
         }
 
-        if viewModel.shouldShowLiveSegment,
-           let start = viewModel.fixedPoints.last,
-           let end = viewModel.livePoint {
-            populateLiveSegment(into: anchorEntity, start: start, end: end)
-        }
+        let liveSignature = liveMeasurementSignature(
+            start: viewModel.fixedPoints.last,
+            livePoint: viewModel.shouldShowLiveSegment ? viewModel.livePoint : nil
+        )
+        if lastLiveSignature != liveSignature {
+            lastLiveSignature = liveSignature
 
-        if lineAnchor == nil {
-            arView.scene.addAnchor(anchorEntity)
-            lineAnchor = anchorEntity
+            if viewModel.shouldShowLiveSegment,
+               let start = viewModel.fixedPoints.last,
+               let end = viewModel.livePoint {
+                populateLiveSegment(into: liveContentEntity, start: start, end: end)
+            } else {
+                hideLiveDotPool()
+            }
         }
 
         updateBillboards()
@@ -77,23 +91,21 @@ extension ARMeasurementCoordinator {
         }
     }
 
-    func populateLockedMeasurement(into anchorEntity: AnchorEntity, points: [SIMD3<Float>]) {
+    func populateLockedMeasurement(into anchorEntity: Entity, points: [SIMD3<Float>]) {
         guard points.count >= 2 else { return }
-
-        let startDot = Self.makeDotEntity(radius: 0.0035)
-        startDot.position = points[0]
-        anchorEntity.addChild(startDot)
 
         for index in 1..<points.count {
             populateLockedSegment(into: anchorEntity, start: points[index - 1], end: points[index])
         }
 
-        let endDot = Self.makeDotEntity(radius: 0.0035)
-        endDot.position = points[points.count - 1]
-        anchorEntity.addChild(endDot)
+        for point in points {
+            let dot = Self.makeDotEntity(radius: 0.0035)
+            dot.position = point
+            anchorEntity.addChild(dot)
+        }
     }
 
-    func populateIdentifiedShape(into anchorEntity: AnchorEntity, points: [SIMD3<Float>], kind: IdentifiedShapeKind) {
+    func populateIdentifiedShape(into anchorEntity: Entity, points: [SIMD3<Float>], kind: IdentifiedShapeKind) {
         if let fillEntity = Self.makeFilledShapeEntity(points: points) {
             anchorEntity.addChild(fillEntity)
         }
@@ -102,20 +114,12 @@ extension ARMeasurementCoordinator {
         populateLockedSegment(into: anchorEntity, start: points[points.count - 1], end: points[0])
     }
 
-    func populateLockedSegment(into anchorEntity: AnchorEntity, start: SIMD3<Float>, end: SIMD3<Float>) {
+    func populateLockedSegment(into anchorEntity: Entity, start: SIMD3<Float>, end: SIMD3<Float>) {
         let delta = end - start
         let distance = simd_length(delta)
         guard distance > 0.002 else { return }
 
         let direction = simd_normalize(delta)
-
-        let startDot = Self.makeDotEntity(radius: 0.0035)
-        startDot.position = start
-        anchorEntity.addChild(startDot)
-
-        let endDot = Self.makeDotEntity(radius: 0.0035)
-        endDot.position = end
-        anchorEntity.addChild(endDot)
 
         let lineModel = Self.makeLineEntity(length: distance)
         lineModel.position = start + (delta / 2)
@@ -123,22 +127,24 @@ extension ARMeasurementCoordinator {
         lineModel.orientation *= simd_quatf(angle: .pi / 2, axis: [1, 0, 0])
         anchorEntity.addChild(lineModel)
 
-        let cmSpacing: Float = 0.01
-        let totalCm = Int(distance / cmSpacing)
+        let cmSpacing = tickSpacing(for: distance)
+        let totalTicks = Int(distance / cmSpacing)
 
-        guard totalCm > 0 else { return }
+        guard totalTicks > 0 else { return }
 
-        for index in 1...totalCm {
+        for index in 1...totalTicks {
             let offset = Float(index) * cmSpacing
+            guard offset < distance else { break }
             let position = start + (direction * offset)
 
             var tickHeight: Float = 0.005
-            if index % 10 == 0 {
+            if index % majorTickInterval(for: cmSpacing) == 0 {
                 tickHeight = 0.014
-                let label = Self.makeTextEntity("\(index)")
+                let labelValue = Int((offset * 100).rounded())
+                let label = Self.makeTextEntity("\(labelValue)")
                 label.position = position
                 anchorEntity.addChild(label)
-            } else if index % 5 == 0 {
+            } else if index % minorTickInterval(for: cmSpacing) == 0 {
                 tickHeight = 0.009
             }
 
@@ -148,30 +154,90 @@ extension ARMeasurementCoordinator {
         }
     }
 
-    func populateLiveSegment(into anchorEntity: AnchorEntity, start: SIMD3<Float>, end: SIMD3<Float>) {
+    func populateLiveSegment(into anchorEntity: Entity, start: SIMD3<Float>, end: SIMD3<Float>) {
         let delta = end - start
         let distance = simd_length(delta)
-        guard distance > 0.002 else { return }
+        guard distance > 0.002 else {
+            hideLiveDotPool()
+            return
+        }
 
         let direction = simd_normalize(delta)
-        let dotSpacing: Float = 0.010
-        let dotCount = Int(distance / dotSpacing)
+        let targetDotCount = min(max(Int(distance / 0.012), 12), 72)
+        let dotSpacing = distance / Float(max(targetDotCount, 1))
+        ensureLiveDotPool(count: targetDotCount + 1, in: anchorEntity)
 
-        for index in 0...dotCount {
+        for index in 0...targetDotCount {
             let offset = Float(index) * dotSpacing
             let position = start + (direction * offset)
-            let dot = Self.makeDotEntity(radius: 0.0022)
+            let dot = liveDotPool[index]
             dot.position = position
-            anchorEntity.addChild(dot)
+            dot.isEnabled = true
+        }
+
+        if liveDotPool.count > targetDotCount + 1 {
+            for index in (targetDotCount + 1)..<liveDotPool.count {
+                liveDotPool[index].isEnabled = false
+            }
         }
     }
 
-    func measurementSignature(fixedPoints: [SIMD3<Float>], livePoint: SIMD3<Float>?) -> String {
+    func clearChildren(from entity: Entity) {
+        for child in entity.children {
+            clearChildren(from: child)
+            child.removeFromParent()
+        }
+    }
+
+    func tickSpacing(for distance: Float) -> Float {
+        if distance < 0.5 {
+            return 0.01
+        }
+        if distance < 1.5 {
+            return 0.02
+        }
+        return 0.05
+    }
+
+    func minorTickInterval(for spacing: Float) -> Int {
+        switch spacing {
+        case ..<0.015:
+            return 5
+        case ..<0.03:
+            return 5
+        default:
+            return 2
+        }
+    }
+
+    func majorTickInterval(for spacing: Float) -> Int {
+        switch spacing {
+        case ..<0.015:
+            return 10
+        case ..<0.03:
+            return 5
+        default:
+            return 2
+        }
+    }
+
+    func lockedMeasurementSignature(fixedPoints: [SIMD3<Float>], identifiedShapeKind: IdentifiedShapeKind?) -> String {
         let fixedSignature = fixedPoints
             .map { point in
                 "\(Int((point.x * 1000).rounded())):\(Int((point.y * 1000).rounded())):\(Int((point.z * 1000).rounded()))"
             }
             .joined(separator: "|")
+        let shapeSignature = identifiedShapeKind.map(\.title) ?? "none"
+        return "\(fixedSignature)#\(shapeSignature)"
+    }
+
+    func liveMeasurementSignature(start: SIMD3<Float>?, livePoint: SIMD3<Float>?) -> String {
+        let startSignature: String
+        if let start {
+            startSignature = "\(Int((start.x * 1000).rounded())):\(Int((start.y * 1000).rounded())):\(Int((start.z * 1000).rounded()))"
+        } else {
+            startSignature = "nil"
+        }
 
         let liveSignature: String
         if let livePoint {
@@ -180,7 +246,24 @@ extension ARMeasurementCoordinator {
             liveSignature = "nil"
         }
 
-        return "\(fixedSignature)#\(liveSignature)"
+        return "\(startSignature)#\(liveSignature)"
+    }
+
+    func ensureLiveDotPool(count: Int, in anchorEntity: Entity) {
+        guard liveDotPool.count < count else { return }
+
+        for _ in liveDotPool.count..<count {
+            let dot = Self.makeDotEntity(radius: 0.0022)
+            dot.isEnabled = false
+            liveDotPool.append(dot)
+            anchorEntity.addChild(dot)
+        }
+    }
+
+    func hideLiveDotPool() {
+        for dot in liveDotPool {
+            dot.isEnabled = false
+        }
     }
 
     func updateBillboards() {
