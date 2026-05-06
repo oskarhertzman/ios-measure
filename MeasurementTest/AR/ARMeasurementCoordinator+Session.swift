@@ -186,11 +186,11 @@ extension ARMeasurementCoordinator: ARSessionDelegate {
 
         let didUpdateLivePoint: Bool
         if let hitPoint {
-            let stabilizedPoint = stabilizePoint(hitPoint)
-            let rightAngleSnappedPoint = snapToRightAngleIfNeeded(stabilizedPoint)
+            let stabilizedHit = stabilizePoint(hitPoint, baseConfidence: confidence)
+            let rightAngleSnappedPoint = snapToRightAngleIfNeeded(stabilizedHit.point)
             let rectangleSnappedPoint = snapToRectangleCompletionIfNeeded(rightAngleSnappedPoint)
             let snappedPoint = snapToExistingPointIfNeeded(rectangleSnappedPoint)
-            didUpdateLivePoint = viewModel.updateLivePoint(snappedPoint, confidence: confidence)
+            didUpdateLivePoint = viewModel.updateLivePoint(snappedPoint, confidence: stabilizedHit.confidence)
         } else {
             recentHits.removeAll()
             currentSnapTarget = nil
