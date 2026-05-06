@@ -45,6 +45,8 @@ final class ARMeasurementCoordinator: NSObject {
     var frameCounter = 0
     static var textCache: [String: MeshResource] = [:]
     var lastRenderedSignature = ""
+    var snapFeedbackGenerator = UIImpactFeedbackGenerator(style: .light)
+    var currentSnapTarget: SIMD3<Float>?
 
     init(viewModel: MeasurementViewModel) {
         self.viewModel = viewModel
@@ -64,6 +66,7 @@ final class ARMeasurementCoordinator: NSObject {
         displayLink.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
         displayLink.add(to: .main, forMode: .common)
         self.displayLink = displayLink
+        snapFeedbackGenerator.prepare()
     }
 
     func stop() {

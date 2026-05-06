@@ -14,15 +14,15 @@ extension ARMeasurementCoordinator: ARSessionDelegate {
         }
 
         let lidarSupported = ARWorldTrackingConfiguration.supportsSceneReconstruction(.mesh)
-        viewModel.isLidarAvailable = lidarSupported
-
-        guard lidarSupported else {
-            viewModel.setAvailability(
-                isLidarAvailable: false,
-                message: "This app requires LiDAR for precise surface measurement."
-            )
-            return
-        }
+		
+		Task { @MainActor in
+			if !lidarSupported {
+				viewModel.setAvailability(
+					isLidarAvailable: false,
+					message: "This app requires LiDAR for precise surface measurement."
+				)
+			}
+		}
 
         let configuration = ARWorldTrackingConfiguration()
         configuration.planeDetection = [.horizontal, .vertical]
@@ -186,14 +186,46 @@ extension ARMeasurementCoordinator: ARSessionDelegate {
         let didUpdateLivePoint: Bool
         if let hitPoint {
             let stabilizedPoint = stabilizePoint(hitPoint)
-            didUpdateLivePoint = viewModel.updateLivePoint(stabilizedPoint, confidence: confidence)
+            let snappedPoint = snapToExistingPointIfNeeded(stabilizedPoint)
+            didUpdateLivePoint = viewModel.updateLivePoint(snappedPoint, confidence: confidence)
         } else {
             recentHits.removeAll()
+            currentSnapTarget = nil
             didUpdateLivePoint = viewModel.updateLivePoint(nil, confidence: .unknown)
         }
 
         guard didUpdateLivePoint else { return }
         syncSceneContent()
+    }
+
+    func snapToExistingPointIfNeeded(_ point: SIMD3<Float>) -> SIMD3<Float> {
+        let snapThreshold: Float = 0.02
+        let candidatePoints = viewModel.fixedPoints + viewModel.savedMeasurements.flatMap(\.points)
+
+        guard let nearestPoint = candidatePoints.min(by: {
+            simd_distance($0, point) < simd_distance($1, point)
+        }) else {
+            currentSnapTarget = nil
+            return point
+        }
+
+        guard simd_distance(nearestPoint, point) <= snapThreshold else {
+            currentSnapTarget = nil
+            return point
+        }
+
+        if shouldTriggerSnapFeedback(for: nearestPoint) {
+            snapFeedbackGenerator.impactOccurred()
+            snapFeedbackGenerator.prepare()
+        }
+
+        currentSnapTarget = nearestPoint
+        return nearestPoint
+    }
+
+    func shouldTriggerSnapFeedback(for point: SIMD3<Float>) -> Bool {
+        guard let currentSnapTarget else { return true }
+        return simd_distance(currentSnapTarget, point) > 0.001
     }
 }
 #endif
