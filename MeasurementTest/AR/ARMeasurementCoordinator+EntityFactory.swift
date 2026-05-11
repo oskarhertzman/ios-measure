@@ -21,9 +21,9 @@ extension ARMeasurementCoordinator {
         container.components.set(BillboardComponent())
         container.components.set(
             DistanceScaledVisualComponent(
-                referenceDistance: 0.7,
-                minScale: 0.55,
-                maxScale: 1.8,
+                referenceDistance: 0.8,
+                minScale: 0.75,
+                maxScale: 1.65,
                 baseScale: SIMD3<Float>(repeating: 1),
                 scaleAxes: SIMD3<Float>(repeating: 1)
             )
@@ -42,9 +42,9 @@ extension ARMeasurementCoordinator {
         container.components.set(BillboardComponent())
         container.components.set(
             DistanceScaledVisualComponent(
-                referenceDistance: 0.8,
-                minScale: 0.75,
-                maxScale: 2.0,
+                referenceDistance: 0.9,
+                minScale: 0.85,
+                maxScale: 1.7,
                 baseScale: SIMD3<Float>(repeating: 1),
                 scaleAxes: SIMD3<Float>(repeating: 1)
             )
@@ -74,9 +74,9 @@ extension ARMeasurementCoordinator {
         container.components.set(BillboardComponent())
         container.components.set(
             DistanceScaledVisualComponent(
-                referenceDistance: 0.8,
-                minScale: 0.8,
-                maxScale: 2.2,
+                referenceDistance: 0.9,
+                minScale: 0.9,
+                maxScale: 1.85,
                 baseScale: SIMD3<Float>(repeating: 1),
                 scaleAxes: SIMD3<Float>(repeating: 1)
             )
@@ -89,9 +89,9 @@ extension ARMeasurementCoordinator {
         let model = ModelEntity(mesh: mesh, materials: [whiteDotMaterial])
         model.components.set(
             DistanceScaledVisualComponent(
-                referenceDistance: 0.8,
-                minScale: 0.8,
-                maxScale: 2.4,
+                referenceDistance: 0.9,
+                minScale: 0.9,
+                maxScale: 1.8,
                 baseScale: SIMD3<Float>(repeating: 1),
                 scaleAxes: SIMD3<Float>(1, 0, 1)
             )

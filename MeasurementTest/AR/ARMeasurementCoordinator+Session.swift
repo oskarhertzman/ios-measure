@@ -26,7 +26,7 @@ extension ARMeasurementCoordinator: ARSessionDelegate {
 
         let configuration = ARWorldTrackingConfiguration()
         configuration.planeDetection = [.horizontal, .vertical]
-        configuration.environmentTexturing = .automatic
+        configuration.environmentTexturing = .none
 
         if ARWorldTrackingConfiguration.supportsSceneReconstruction(.meshWithClassification) {
             configuration.sceneReconstruction = .meshWithClassification
