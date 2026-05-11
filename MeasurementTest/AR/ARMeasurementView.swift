@@ -49,6 +49,7 @@ final class ARMeasurementCoordinator: NSObject {
     let maxRecentHits = 5
 
     var frameCounter = 0
+    var billboardFrameCounter = 0
     static var textCache: [String: MeshResource] = [:]
     var lastLockedSignature = ""
     var lastLiveSignature = ""

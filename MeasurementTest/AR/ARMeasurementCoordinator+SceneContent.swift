@@ -292,6 +292,8 @@ extension ARMeasurementCoordinator {
     }
 
     func updateBillboards() {
+        billboardFrameCounter += 1
+        guard billboardFrameCounter % 3 == 0 else { return }
         guard let arView, let frame = arView.session.currentFrame else { return }
 
         let cameraTransform = frame.camera.transform
@@ -301,7 +303,9 @@ extension ARMeasurementCoordinator {
             cameraTransform.columns.3.z
         )
 
-        pruneTrackedRenderableEntities()
+        if billboardFrameCounter % 30 == 0 {
+            pruneTrackedRenderableEntities()
+        }
 
         for entity in billboardEntities where entity.isEnabled {
             entity.look(
