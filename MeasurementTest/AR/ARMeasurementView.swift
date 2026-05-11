@@ -75,7 +75,7 @@ final class ARMeasurementCoordinator: NSObject {
         arView.addGestureRecognizer(tapRecognizer)
 
         let displayLink = CADisplayLink(target: self, selector: #selector(updateLiveMeasurement))
-        displayLink.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
+        displayLink.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 45, preferred: 45)
         displayLink.add(to: .main, forMode: .common)
         self.displayLink = displayLink
         snapFeedbackGenerator.prepare()

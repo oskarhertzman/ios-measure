@@ -27,6 +27,7 @@ extension ARMeasurementCoordinator: ARSessionDelegate {
         let configuration = ARWorldTrackingConfiguration()
         configuration.planeDetection = [.horizontal, .vertical]
         configuration.environmentTexturing = .none
+        applyPreferredVideoFormat(to: configuration, targetFrameRate: 45)
 
         if ARWorldTrackingConfiguration.supportsSceneReconstruction(.meshWithClassification) {
             configuration.sceneReconstruction = .meshWithClassification
@@ -46,6 +47,23 @@ extension ARMeasurementCoordinator: ARSessionDelegate {
 
         arView.environment.sceneUnderstanding.options = [.occlusion, .physics, .collision]
         arView.renderOptions.insert(.disableMotionBlur)
+    }
+
+    func applyPreferredVideoFormat(to configuration: ARWorldTrackingConfiguration, targetFrameRate: Int) {
+        guard let videoFormat = ARWorldTrackingConfiguration.supportedVideoFormats
+            .filter({ $0.framesPerSecond <= targetFrameRate })
+            .max(by: {
+                if $0.framesPerSecond == $1.framesPerSecond {
+                    let lhsPixels = $0.imageResolution.width * $0.imageResolution.height
+                    let rhsPixels = $1.imageResolution.width * $1.imageResolution.height
+                    return lhsPixels < rhsPixels
+                }
+                return $0.framesPerSecond < $1.framesPerSecond
+            }) else {
+            return
+        }
+
+        configuration.videoFormat = videoFormat
     }
 
     func configureCoaching(for arView: ARView) {
@@ -151,7 +169,6 @@ extension ARMeasurementCoordinator: ARSessionDelegate {
     @objc
     func updateLiveMeasurement() {
         frameCounter += 1
-        guard frameCounter % 2 == 0 else { return }
 
         guard let arView, viewModel.isLidarAvailable else { return }
         defer { updateBillboards() }
