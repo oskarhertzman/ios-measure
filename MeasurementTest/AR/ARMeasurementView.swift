@@ -42,6 +42,8 @@ final class ARMeasurementCoordinator: NSObject {
     var lockedContentEntity = Entity()
     var liveContentEntity = Entity()
     var liveDotPool: [Entity] = []
+    var billboardEntities: [Entity] = []
+    var distanceScaledEntities: [Entity] = []
 
     var recentHits: [SIMD3<Float>] = []
     let maxRecentHits = 5

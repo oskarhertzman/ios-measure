@@ -18,7 +18,9 @@ extension ARMeasurementCoordinator {
 
         let anchorEntity = anchor ?? AnchorEntity(world: .zero)
         if anchorEntity.children.isEmpty {
-            anchorEntity.addChild(Self.makeDotEntity(radius: 0.0035))
+            let dot = Self.makeDotEntity(radius: 0.0035)
+            anchorEntity.addChild(dot)
+            trackRenderableEntity(dot)
         }
 
         anchorEntity.position = point
@@ -102,6 +104,7 @@ extension ARMeasurementCoordinator {
             let dot = Self.makeDotEntity(radius: 0.0035)
             dot.position = point
             anchorEntity.addChild(dot)
+            trackRenderableEntity(dot)
         }
     }
 
@@ -126,6 +129,7 @@ extension ARMeasurementCoordinator {
         lineModel.look(at: end, from: lineModel.position, relativeTo: nil)
         lineModel.orientation *= simd_quatf(angle: .pi / 2, axis: [1, 0, 0])
         anchorEntity.addChild(lineModel)
+        trackRenderableEntity(lineModel)
 
         let cmSpacing = tickSpacing(for: distance)
         let totalTicks = Int(distance / cmSpacing)
@@ -144,6 +148,7 @@ extension ARMeasurementCoordinator {
                 let label = Self.makeTextEntity("\(labelValue)")
                 label.position = position
                 anchorEntity.addChild(label)
+                trackRenderableEntity(label)
             } else if index % minorTickInterval(for: cmSpacing) == 0 {
                 tickHeight = 0.009
             }
@@ -151,6 +156,7 @@ extension ARMeasurementCoordinator {
             let tick = Self.makeTickEntity(height: tickHeight)
             tick.position = position
             anchorEntity.addChild(tick)
+            trackRenderableEntity(tick)
         }
     }
 
@@ -275,6 +281,7 @@ extension ARMeasurementCoordinator {
             dot.isEnabled = false
             liveDotPool.append(dot)
             anchorEntity.addChild(dot)
+            trackRenderableEntity(dot)
         }
     }
 
@@ -294,8 +301,9 @@ extension ARMeasurementCoordinator {
             cameraTransform.columns.3.z
         )
 
-        let query = EntityQuery(where: .has(BillboardComponent.self))
-        arView.scene.performQuery(query).forEach { entity in
+        pruneTrackedRenderableEntities()
+
+        for entity in billboardEntities where entity.isEnabled {
             entity.look(
                 at: cameraPosition,
                 from: entity.position(relativeTo: nil),
@@ -303,8 +311,7 @@ extension ARMeasurementCoordinator {
             )
         }
 
-        let scalingQuery = EntityQuery(where: .has(DistanceScaledVisualComponent.self))
-        arView.scene.performQuery(scalingQuery).forEach { entity in
+        for entity in distanceScaledEntities where entity.isEnabled {
             guard let component = entity.components[DistanceScaledVisualComponent.self] else { return }
             let distanceToCamera = simd_distance(entity.position(relativeTo: nil), cameraPosition)
             let factor = min(
@@ -318,6 +325,27 @@ extension ARMeasurementCoordinator {
             )
             entity.scale = component.baseScale * scaleFactor
         }
+    }
+
+    func trackRenderableEntity(_ entity: Entity) {
+        if entity.components[BillboardComponent.self] != nil,
+           !billboardEntities.contains(where: { $0 === entity }) {
+            billboardEntities.append(entity)
+        }
+
+        if entity.components[DistanceScaledVisualComponent.self] != nil,
+           !distanceScaledEntities.contains(where: { $0 === entity }) {
+            distanceScaledEntities.append(entity)
+        }
+
+        for child in entity.children {
+            trackRenderableEntity(child)
+        }
+    }
+
+    func pruneTrackedRenderableEntities() {
+        billboardEntities.removeAll { $0.parent == nil }
+        distanceScaledEntities.removeAll { $0.parent == nil }
     }
 }
 #endif
