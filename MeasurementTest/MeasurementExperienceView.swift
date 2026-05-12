@@ -3,45 +3,54 @@ import SwiftUI
 import UIKit
 
 struct MeasurementExperienceView: View {
+    private enum AppScreen: CaseIterable, Hashable {
+        case measure
+        case notes
+
+        var title: String {
+            switch self {
+            case .measure:
+                "Measure"
+            case .notes:
+                "Notes"
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .measure:
+                "ruler"
+            case .notes:
+                "note.text"
+            }
+        }
+    }
+
     @StateObject private var viewModel = MeasurementViewModel()
-    @State private var isSavedMeasurementsPresented = false
     @State private var isSavePromptPresented = false
     @State private var pendingMeasurementName = ""
     @State private var impactGenerator = UIImpactFeedbackGenerator(style: .light)
-
+    @State private var selectedScreen: AppScreen = .measure
     var body: some View {
         ZStack {
-            ARMeasurementView(viewModel: viewModel)
-                .ignoresSafeArea()
+            if selectedScreen == .measure {
+                measureScreen
+            } else {
+                NotesScreen(
+                    measurements: viewModel.savedMeasurements,
+                    onDeleteMeasurement: viewModel.deleteSavedMeasurement,
+                    onClearAll: viewModel.clearSavedMeasurements
+                )
+            }
 
-            VStack(spacing: 0) {
-                topPanel
+            VStack {
                 Spacer()
-                bottomPanel
+                screenToggle
             }
             .padding(.horizontal, 20)
-            .padding(.vertical, 24)
-
-            reticle
-
-			VStack {
-				HStack {
-					Spacer()
-					menuButton
-				}
-				Spacer()
-			}
-            .padding(.horizontal, 20)
-            .padding(.vertical, 24)
+            .padding(.bottom, 24)
         }
         .background(Color.black)
-        .sheet(isPresented: $isSavedMeasurementsPresented) {
-            SavedMeasurementsSheet(
-                measurements: viewModel.savedMeasurements,
-                onDeleteMeasurement: viewModel.deleteSavedMeasurement,
-                onClearAll: viewModel.clearSavedMeasurements
-            )
-        }
         .sheet(isPresented: $isSavePromptPresented) {
             SaveMeasurementSheet(
                 name: $pendingMeasurementName,
@@ -54,8 +63,10 @@ struct MeasurementExperienceView: View {
         }
         .onAppear {
             impactGenerator.prepare()
+            updateSceneSuspensionState()
         }
-        .onChange(of: isSavedMeasurementsPresented) { _, _ in
+        .onChange(of: selectedScreen) { _, _ in
+            playLightHaptic()
             updateSceneSuspensionState()
         }
         .onChange(of: isSavePromptPresented) { _, _ in
@@ -63,16 +74,62 @@ struct MeasurementExperienceView: View {
         }
     }
 
-    private var menuButton: some View {
-        Button {
-            isSavedMeasurementsPresented = true
-        } label: {
-            Image(systemName: "line.3.horizontal")
-                .font(.system(size: 18, weight: .semibold))
-                .frame(width: 46, height: 46)
-                .background(.black.opacity(0), in: Circle())
+    private var measureScreen: some View {
+        ZStack {
+            ARMeasurementView(viewModel: viewModel)
+                .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                topPanel
+                Spacer()
+                bottomPanel
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 24)
+            .padding(.bottom, 112)
+
+            reticle
         }
-        .foregroundStyle(.white)
+    }
+
+    @ViewBuilder
+    private var screenToggle: some View {
+        if #available(iOS 26.0, *) {
+            nativeGlassScreenToggle
+        } else {
+            fallbackScreenToggle
+        }
+    }
+
+    @available(iOS 26.0, *)
+    private var nativeGlassScreenToggle: some View {
+        screenPicker
+            .frame(width: 192)
+            .glassEffect(.regular.interactive(), in: .capsule)
+            .preferredColorScheme(.dark)
+    }
+
+    private var fallbackScreenToggle: some View {
+        screenPicker
+            .frame(width: 192)
+            .padding(4)
+            .background(.black.opacity(0.72), in: Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(.white.opacity(0.12), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.28), radius: 16, y: 8)
+    }
+
+    private var screenPicker: some View {
+        Picker("Screen", selection: $selectedScreen) {
+            ForEach(AppScreen.allCases, id: \.self) { screen in
+                Text("\(Image(systemName: screen.icon)) \(screen.title)")
+                    .tag(screen)
+            }
+        }
+        .pickerStyle(.segmented)
+        .controlSize(.large)
     }
 
     private var topPanel: some View {
@@ -253,25 +310,31 @@ struct MeasurementExperienceView: View {
     }
 
     private func updateSceneSuspensionState() {
-        viewModel.isSceneUpdatesSuspended = isSavedMeasurementsPresented || isSavePromptPresented
+        viewModel.isSceneUpdatesSuspended = selectedScreen == .notes || isSavePromptPresented
     }
 }
 
-private struct SavedMeasurementsSheet: View {
+private struct NotesScreen: View {
     let measurements: [SavedMeasurement]
     let onDeleteMeasurement: (UUID) -> Void
     let onClearAll: () -> Void
-    @Environment(\.dismiss) private var dismiss
+
+    private var notesBackground: Color {
+        Color(uiColor: .systemBackground)
+    }
 
     var body: some View {
         NavigationStack {
-            Group {
+            ZStack {
+                notesBackground.ignoresSafeArea()
+
                 if measurements.isEmpty {
                     ContentUnavailableView(
-                        "No Saved Measurements",
-                        systemImage: "ruler",
-                        description: Text("Save a measurement to see it here.")
+                        "No Notes",
+                        systemImage: "note.text",
+                        description: Text("Saved measurements will appear here.")
                     )
+                    .padding(.bottom, 96)
                 } else {
                     List(measurements) { measurement in
                         Group {
@@ -284,9 +347,9 @@ private struct SavedMeasurementsSheet: View {
                                 HStack(alignment: .center, spacing: 12) {
                                     Image(systemName: "ruler")
                                         .font(.headline)
-                                        .foregroundStyle(.black.opacity(0.8))
+                                        .foregroundStyle(.primary.opacity(0.8))
                                         .frame(width: 28, height: 28)
-                                        .background(Color.black.opacity(0.06), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                        .background(.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text(measurement.name)
@@ -310,30 +373,22 @@ private struct SavedMeasurementsSheet: View {
                                 }
                             }
                         }
-                        .listRowBackground(Color.white)
+                        .listRowBackground(notesBackground)
                     }
                     .scrollContentBackground(.hidden)
-                    .background(Color.white)
+                    .background(notesBackground)
+                    .padding(.bottom, 96)
                 }
             }
-            .background(Color.white)
-            .navigationTitle("Saved Measurements")
+            .navigationTitle("Notes")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     if !measurements.isEmpty {
                         Button("Clear All", role: .destructive, action: onClearAll)
                     }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                }
             }
         }
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
-        .background(Color.white)
     }
 }
 
@@ -392,7 +447,7 @@ private struct RectangleDiagram: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .stroke(Color.black.opacity(0.14), lineWidth: 1)
+                .stroke(.primary.opacity(0.14), lineWidth: 1)
                 .frame(width: 96, height: 96)
 
             Path { path in
@@ -406,7 +461,7 @@ private struct RectangleDiagram: View {
                 path.move(to: CGPoint(x: 18, y: 48))
                 path.addLine(to: CGPoint(x: 78, y: 48))
             }
-            .stroke(.black.opacity(0.65), lineWidth: 1.5)
+            .stroke(.primary.opacity(0.65), lineWidth: 1.5)
 
             ForEach(Array([
                 CGPoint(x: 18, y: 18),
@@ -415,7 +470,7 @@ private struct RectangleDiagram: View {
                 CGPoint(x: 18, y: 78)
             ].enumerated()), id: \.offset) { _, point in
                 Circle()
-                    .fill(.black.opacity(0.78))
+                    .fill(.primary.opacity(0.78))
                     .frame(width: 6, height: 6)
                     .position(point)
             }
@@ -428,6 +483,10 @@ private struct SaveMeasurementSheet: View {
     @Binding var name: String
     let onCancel: () -> Void
     let onSave: () -> Void
+
+    private var sheetBackground: Color {
+        Color(uiColor: .systemBackground)
+    }
 
     var body: some View {
         NavigationStack {
@@ -443,7 +502,7 @@ private struct SaveMeasurementSheet: View {
             }
             .padding(24)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(Color.white)
+            .background(sheetBackground)
             .navigationTitle("Save Measurement")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -456,7 +515,7 @@ private struct SaveMeasurementSheet: View {
         }
         .presentationDetents([.fraction(0.28)])
         .presentationDragIndicator(.visible)
-        .background(Color.white)
+        .background(sheetBackground)
     }
 }
 
